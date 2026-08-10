@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# PreToolUse(Bash): DENY `git commit` / `git push` trừ khi prompt GẦN NHẤT của người dùng
+# cho phép rõ ràng.
+#
+# Vì sao cần: luật "chỉ commit khi user gõ OK" trước nay chỉ là câu chữ trong the ship skill.
+# Session con chạy `--dangerously-skip-permissions` thì không có gì cản — 2026-08-05 phát hiện
+# 4 commit trên một branch mà user chưa duyệt cái nào.
+#
+# Consent phải đến từ NGƯỜI: hook đọc lượt user cuối trong transcript của chính session đó.
+# Session con không tự tạo được user message nên không lách được bằng cách sửa progress.md.
+#
+# Ratchet trace: feedback_git_workflow ("VKL COMMIT LUÔN RỒI À" 29/06) + báo cáo ngày 05/08.
+
+set -uo pipefail
+
+input=$(cat)
+cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)
+[ -n "$cmd" ] || exit 0
+
+# Chỉ gác lệnh THỰC SỰ tạo commit / đẩy lên remote.
+# `git` phải đứng đầu chuỗi hoặc ngay sau ; & | ( — không phải sau khoảng trắng bất kỳ.
+# Nếu nới hơn, một lệnh chỉ *nhắc tới* chuỗi "git commit" trong văn bản cũng bị chặn.
+printf '%s' "$cmd" | grep -qE '(^|[;&|(])[[:space:]]*git[[:space:]]+(commit|push)([[:space:]]|$)' || exit 0
+
+deny() {
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
+  exit 0
+}
+
+transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
+[ -n "$transcript" ] && [ -f "$transcript" ] \
+  || deny "⛔ Không đọc được transcript để xác minh user đã đồng ý commit. Hỏi user rồi commit sau."
+
+# Lượt user cuối cùng — ưu tiên message user THẬT, fallback last-prompt.
+#
+# Trước đây ưu tiên ngược lại và hook trễ ĐÚNG MỘT LƯỢT: bản ghi `last-prompt` chỉ được ghi
+# vào transcript sau khi lượt đó chạy xong, nên lúc hook đọc nó vẫn đang giữ prompt của lượt
+# TRƯỚC. 06/08 user gõ thẳng "okie commit and push nhé" vẫn bị chặn, phải gõ thêm một lượt
+# nữa mới lọt. Nguy hiểm hơn cả phiền: consent của lượt cũ trôi sang lượt sau — đúng thứ
+# hook này sinh ra để chặn.
+#
+# Message user thì không trễ, nhưng phải lọc hai loại KHÔNG do người gõ (chính chúng là lý do
+# bản cũ né sang last-prompt): system-reminder (`<...`) và thông báo background task
+# (`[SYSTEM NOTIFICATION...`) — cả hai đều nằm dưới type "user".
+last=$(jq -Rc '
+  fromjson? // empty | select(.type == "user") | .message.content
+  | if type == "array" then (.[0] | select(.type == "text") | .text)
+    elif type == "string" then . else empty end
+  | select(type == "string" and length > 0
+           and (startswith("<") | not)
+           and (startswith("[SYSTEM NOTIFICATION") | not)) | @json
+' "$transcript" 2>/dev/null | tail -1)
+[ -n "$last" ] || last=$(jq -Rc '
+  fromjson? // empty | select(.type == "last-prompt") | .lastPrompt
+  | select(type == "string" and length > 0) | @json
+' "$transcript" 2>/dev/null | tail -1)
+[ -n "$last" ] || deny "⛔ Chưa thấy lượt nào của user trong session này. Không tự commit."
+
+msg=$(printf '%s' "$last" | jq -r 'fromjson' 2>/dev/null \
+  | perl -CSD -MUnicode::Normalize -ne 'print NFD(lc($_) =~ s/\x{111}/d/gr) =~ s/\p{M}//gr' 2>/dev/null)
+[ -n "$msg" ] || deny "⛔ Không đọc được prompt cuối của user. Không tự commit."
+
+# Phủ định đi kèm chữ "commit"/"push" — phải xét TRƯỚC, nếu không "đừng commit" lại lọt.
+if printf '%s' "$msg" | grep -qE '(dung|khong|ko|chua|khoan|dinh)[[:space:]]+(tu[[:space:]]+)?(commit|push)'; then
+  deny "⛔ Prompt cuối của user là KHÔNG commit/push. Dừng lại, báo cáo rồi đợi."
+fi
+
+# Cho phép rõ ràng.
+if printf '%s' "$msg" | grep -qE '(^|[^a-z])(commit|push)([^a-z]|$)|/commit|/push|day len|len staging'; then
+  exit 0
+fi
+
+deny "⛔ User CHƯA đồng ý commit/push trong lượt này. Consent chỉ có giá trị cho ĐÚNG lượt user gõ nó — không mang sang phase sau. Báo cáo xong, kết thúc bằng \\\"OK = em sẽ commit phase này.\\\" rồi ĐỢI."

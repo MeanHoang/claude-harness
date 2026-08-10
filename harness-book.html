@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harness handbook</title>
+<style>
+  :root{
+    --bg:#fbfbfa; --fg:#1f1f1d; --muted:#6b6b66; --line:#e6e5e0;
+    --card:#fff; --accent:#2f6f4e; --accent-soft:#eef5f0;
+    --warn:#8a5a12; --warn-soft:#fdf6e8; --danger:#96341f; --danger-soft:#fbeeea;
+    --code-bg:#f4f4f1;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#16171a; --fg:#e9e8e4; --muted:#9c9c96; --line:#2c2e33;
+      --card:#1d1f23; --accent:#7fb99a; --accent-soft:#1c2a23;
+      --warn:#d9b071; --warn-soft:#2a2318; --danger:#e0917d; --danger-soft:#2b1d19;
+      --code-bg:#22242a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:56px 22px 96px}
+  header{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:36px}
+  h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:44px 0 12px;letter-spacing:-.01em}
+  h3{font-size:16px;margin:26px 0 8px}
+  .lede{color:var(--muted);margin:0;font-size:17px}
+  p,li{margin:9px 0}
+  code{background:var(--code-bg);padding:1px 5px;border-radius:4px;
+    font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;
+    padding:14px 16px;overflow-x:auto;margin:14px 0}
+  pre code{background:none;padding:0;font-size:13px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--accent-soft);font-weight:600}
+  .note{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:16px 0}
+  .warn{background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:14px 18px;margin:16px 0}
+  .danger{background:var(--danger-soft);border:1px solid var(--danger);border-radius:8px;padding:14px 18px;margin:16px 0}
+  .muted{color:var(--muted);font-size:14px}
+  ol.steps{padding-left:20px}
+  ol.steps>li{margin:14px 0}
+  hr{border:0;border-top:1px solid var(--line);margin:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Harness handbook</h1>
+  <p class="lede">Installing and running a development workflow where several specialised Claude
+  sessions work one feature in parallel.</p>
+</header>
+
+<h2>1. What problem it solves</h2>
+
+<p>One session doing a whole feature accumulates context as it goes: it reads the code, writes the
+code, then reviews the code it just wrote. By the end it is both slow and biased, and nobody is
+good at catching their own mistakes.</p>
+
+<p>This harness splits a feature across <b>several specialised sessions</b>, each in its own
+terminal tab, all on one git worktree. They call each other, bounce work back and forth, and
+escalate to you at only three decision points.</p>
+
+<table>
+  <tr><th>Role</th><th>Does</th><th>Reads the parent's findings?</th></tr>
+  <tr><td><b>scout</b></td><td>Survey, verify against real code, write the plan. Stops at the plan gate.</td><td>Yes</td></tr>
+  <tr><td><b>coder</b></td><td>Implement the plan, one phase at a time.</td><td>Yes</td></tr>
+  <tr><td><b>research</b></td><td>Answer the coder's questions with <code>file:line</code> evidence.</td><td>Yes</td></tr>
+  <tr><td><b>ux</b></td><td>Design the interface <i>before</i> the coder writes anything.</td><td>Yes</td></tr>
+  <tr><td><b>reviewer</b></td><td>Read the diff with unprimed eyes.</td><td><b>No</b>, deliberately</td></tr>
+  <tr><td><b>checker</b></td><td>Judge by <i>running it</i>, not by reading.</td><td><b>No</b>, deliberately</td></tr>
+</table>
+
+<div class="note">
+<b>Why reviewer and checker are kept in the dark.</b> Knowing the parent's conclusions destroys the
+one thing these two roles exist for. The reviewer is worth having because its eyes are unprimed;
+the checker is worth having because it demands evidence from a real run. Do not "make it
+consistent" with the other four.
+</div>
+
+<h2>2. Install</h2>
+
+<pre><code>git clone https://github.com/MeanHoang/claude-harness ~/claude-harness
+cd ~/claude-harness
+
+./install.sh /path/to/project           # copy into the project (default)
+./install.sh /path/to/project --link    # symlink instead, one shared source</code></pre>
+
+<p>The default is <b>copy</b>. This is a package you paste into a project, and each project is then
+free to diverge. Nothing at the destination is destroyed: a pre-existing real file is renamed to
+<code>*.bak.&lt;timestamp&gt;</code> first.</p>
+
+<p>Use <code>--link</code> when you want a single source of truth. Editing a skill inside the
+project then edits it here, and one <code>git commit</code> in this repo captures it. The trade-off
+is that every project sharing the link changes together.</p>
+
+<p><code>settings.json</code> and <code>settings.local.json</code> are <b>never written</b>: they
+carry per-project permissions and hook wiring. Wire the hooks by hand after installing.</p>
+
+<h3>Fill in your own values</h3>
+
+<p>Project-specific values were stripped before publishing and replaced with <code>{{VARS}}</code>:
+package paths, cloud project ids, git remote, store domains, test identities. Fourteen in all.</p>
+
+<pre><code>cp harness.config.example harness.config     # fill it in; it is gitignored
+./fill-vars.sh /path/to/project harness.config</code></pre>
+
+<p><code>fill-vars.sh</code> is idempotent, and any <code>{{VAR}}</code> with no matching key is
+left visible and reported. Nothing is silently replaced with an empty string.</p>
+
+<h3>Requirements</h3>
+<ul>
+  <li><b>git</b>, because the harness is built on <code>git worktree</code></li>
+  <li><b>cmux</b> for workspaces and tabs. Without it the worktrees still work; you just open the sessions by hand.</li>
+  <li><b>python3</b>, used by <code>ship-board.sh</code> and <code>fill-vars.sh</code></li>
+</ul>
+
+<h3>Declaring what your project requires</h3>
+
+<p><code>bootstrap-worktree.sh</code> checks that a fresh worktree has its guards. By default it
+requires <code>readonly-intent-guard.sh</code>, <code>branch-guard.sh</code> and
+<code>settings.local.json</code>. If your project needs more, list them in
+<code>.claude/harness-required.txt</code>, one path per line:</p>
+
+<pre><code>.claude/skills/&lt;your-pipeline-skill&gt;/SKILL.md
+.claude/hooks/&lt;your-hook&gt;.sh</code></pre>
+
+<p>That keeps the shared script free of any one repo's skill names.</p>
+
+<h2>3. The life of a feature</h2>
+
+<ol class="steps">
+  <li><b>Open it.</b> <code>.claude/scripts/feature-open.sh &lt;slug&gt; [task-url] [feature|bugfix|chore|improve]</code>
+      does five things in one command: creates the worktree, equips it with the harness, creates
+      <code>progress.md</code>, creates a cmux workspace, and opens six tabs named after the roles.</li>
+  <li><b>Load the context.</b> The script writes <code>kickoff-scout.md</code> with the research
+      section blank. A child session is born with zero memory: whatever you do not write into that
+      file is gone. Do the research in the parent session and fill it in, including the
+      <code>file:line</code> you already found, which conventions apply, and which questions the
+      child must put to the user rather than guess.</li>
+  <li><b>Start the scout.</b> See section 5; there are traps.</li>
+  <li><b>Let it run.</b> The scout writes a plan and stops at the gate. You approve. The coder works
+      phase by phase, reviewer and ux bounce findings back, the checker runs it for real. Only three
+      gates reach you: approve the plan, approve the code, settle a trade-off.</li>
+  <li><b>Watch it.</b> <code>.claude/scripts/ship-board.sh</code> prints every running feature, with
+      whatever is waiting on you flagged 🚦 and sorted to the top.</li>
+</ol>
+
+<h2>4. Where the state lives</h2>
+
+<p><code>.claude/ship/&lt;slug&gt;/progress.md</code> is the <b>single source of truth</b> for a
+feature. A machine-readable <code>state</code> block sits at the top; everything below it is for
+humans.</p>
+
+<pre><code>&lt;!-- state
+slug: &lt;slug&gt;
+branch: bugfix/&lt;slug&gt;
+kind: bug            # bug | feature
+step: 3              # 0..7
+phase: -
+awaiting: user       # scout|coder|research|reviewer|ux|checker|user|none
+round: 0             # coder-reviewer rounds; at 3 you must ask the user
+gate: decision       # none|plan|code|decision  &lt;- anything but "none" means WAITING ON THE USER
+verdict: fix         # kind: bug only
+--&gt;</code></pre>
+
+<div class="warn">
+<b>The state block drifts out of sync with the NOW line at the bottom.</b> This has happened for
+real: state said <code>awaiting: coder</code> while NOW said "blocked, waiting for the user to
+decide". When they disagree, <b>trust the NOW line</b>. It gets updated by hand at the end of every
+turn; the state block is the one people forget. Fix the state block the moment you notice.
+</div>
+
+<h2>5. cmux traps, read before starting any role</h2>
+
+<div class="danger">
+<b>Trap 1: <code>cmux send</code> types into the current command line and does not clear it.</b><br>
+Any tab holding unsubmitted text will mangle your command. Seen for real: a tab already held
+<code>! gcloud auth login</code>, the launch command was appended to it, and the shell ran
+<code>loginclaude --dangerously-skip-permissions …</code>. gcloud swallowed the whole thing and the
+session never started. <b>Always send <code>ctrl+u</code> first.</b>
+</div>
+
+<div class="danger">
+<b>Trap 2: looking a role up by name with awk misses the selected tab.</b><br>
+The selected row is prefixed with <code>*</code>, so <code>$2</code> is <code>surface:13</code>
+rather than the role name. Strip the asterisk <b>before</b> splitting columns:
+<pre><code>sid=$(cmux list-pane-surfaces --workspace "$WS" | tr -d '*' | awk '$2=="scout"{print $1; exit}')</code></pre>
+Get this wrong and the command falls through to whichever tab is selected, which may be a different
+role or a different feature entirely.
+</div>
+
+<div class="warn">
+<b>Trap 3: workspace and surface ids are renumbered</b> every time a workspace is closed and
+reopened. Always look them up by <b>name</b>; never hardcode an id into a script or a kickoff file.
+</div>
+
+<div class="warn">
+<b>Trap 4: long strings containing <code>$(cat …)</code> often fail to send.</b> The reliable route
+is a short one-line command pointing at a script file:
+<pre><code>printf 'cd %s\nexec claude --dangerously-skip-permissions "$(cat %s)"\n' "$WT" "$KICKOFF" &gt; /tmp/launch.sh
+cmux send --workspace "$WS" --surface "$SID" $'bash /tmp/launch.sh\n'</code></pre>
+Note the trailing <code>\n</code>: <code>cmux send</code> does not press Enter for you.
+</div>
+
+<h3>Confirming a session actually started</h3>
+<p>There is no command to read a pane's contents, so check the process table instead:</p>
+<pre><code>for p in $(pgrep -f "bin/claude"); do
+  lsof -a -p "$p" -d cwd -Fn 2&gt;/dev/null | sed -n 's/^n//p'
+done | grep &lt;slug&gt;</code></pre>
+
+<h2>6. Why child sessions run <code>--dangerously-skip-permissions</code></h2>
+
+<p>They run unattended. A command containing <code>$(…)</code> or a pipe cannot be analysed
+statically, so Claude Code always asks, and the session sits there waiting for a human to click
+Yes.</p>
+
+<div class="note">
+<b>It is safe because hooks are not bypassed.</b> Verified experimentally: running
+<code>claude --dangerously-skip-permissions -p</code> with a read-only prompt still had
+<code>readonly-intent-guard</code> deny the Write, and the file was never created. The flag drops
+the <b>permission prompt</b>, not the <b>guard rails</b>.
+<br><br>
+That is exactly why <code>bootstrap-worktree.sh</code> is mandatory. A worktree missing its hooks,
+running in bypass mode, is an agent under no rules at all.
+</div>
+
+<h2>7. The rules that keep quality up</h2>
+
+<h3>Re-verify the parent; do not re-investigate</h3>
+<p>The four context-reading roles (scout, coder, research, ux) open their report with exactly this
+line:</p>
+<pre><code>Parent check: confirmed X/Y · refuted: &lt;claim, why, file:line&gt; · parent missed: &lt;new finding&gt;</code></pre>
+<p>A refutation belongs on that first line, never buried at the end: the parent is using that very
+conclusion to answer the user.</p>
+
+<h3>Calling another role means actually calling</h3>
+<p>Writing "handed this to the coder" in your own report <b>makes nobody run</b>. Seen for real: the
+reviewer wrote "still open: a UX question", the ux session wrote "waiting to be called", and the two
+waited on each other indefinitely until the user carried the message himself.</p>
+
+<h3>Before proposing any new field, helper, or component</h3>
+<ol>
+  <li>Does this value already exist somewhere? Grep the concept, read the type definitions, read the
+      <b>entire</b> return value of the related service.</li>
+  <li>Can it be derived from data you already have?</li>
+  <li>If you genuinely must create it, which places did you already search? List them.</li>
+</ol>
+<p class="muted">This failure is real: a session burned a whole day when the actual defect was only
+"the value already exists but is never passed up, so it lands in the wrong fallback branch", and the
+report went in circles before proposing a brand-new field.</p>
+
+<h2>8. For bugs, use <code>bug-check</code> rather than opening a feature</h2>
+
+<p>The output of <code>bug-check</code> is a <b>diagnosis</b>, not code. No branch, no worktree, no
+plan. One session, three legs, a report, then stop.</p>
+
+<table>
+  <tr><th>Leg</th><th>What to find</th></tr>
+  <tr><td>1. The problem</td><td>The exact symptom, whether it reproduces, how many places are affected</td></tr>
+  <tr><td>2. The code</td><td>Which path it travels, with concrete <code>file:line</code>. Never infer from a function name.</td></tr>
+  <tr><td>3. The configuration</td><td>The <b>actual</b> settings on that environment. Most bugs live here.</td></tr>
+</table>
+
+<p>Put the three together and look for the mismatch: <b>the configuration says A while the code
+reads B, and that is the break.</b></p>
+
+<p>Exactly one of four verdicts: <code>fix</code>, <code>skip</code>, <code>need-data</code>,
+<code>need-logging</code>. When you are not sure, <code>need-data</code> and
+<code>need-logging</code> are legitimate answers, not failures.</p>
+
+<h2>9. Describing a bug to someone who has never touched the flow</h2>
+
+<p>This block is mandatory at the top of every bug-fix plan. Exactly five lines, one sentence each,
+each carrying a real number:</p>
+
+<table>
+  <tr><th>Line</th><th>Content</th><th>Example</th></tr>
+  <tr><td>Observed</td><td>Symptom plus real numbers</td><td>log shows <code>Refunded $18 · Remaining $50</code></td></tr>
+  <tr><td>Expected</td><td>The correct number or behaviour</td><td>18 + 50 should equal 60</td></tr>
+  <tr><td>Setting</td><td>Which setting field, on or off</td><td>"reward additional fee" = OFF</td></tr>
+  <tr><td>Wrong field</td><td>Name, real value, source</td><td><code>transactionTotal</code>=18 (gross) vs <code>currentSubtotal</code>=50 (net)</td></tr>
+  <tr><td>Break point</td><td>One sentence plus <code>file:line</code></td><td>two numbers on one row, two different bases, <code>x.js:1569</code></td></tr>
+</table>
+
+<p>Plus a single <b>Flow</b> line, every hop carrying its <code>file:line</code>:</p>
+<pre><code>webhook X -&gt; controller.js:1547 (writes) -&gt; helper.js:12 (computes) -&gt; render.js:148 (displays)</code></pre>
+
+<div class="note">
+If you cannot fill a line, you <b>do not understand the bug yet and may not write the plan</b>.
+Write "line 3 unknown, need to read the settings", go and get it, and never pad a box to look
+complete.
+</div>
+
+<hr>
+<p class="muted">Every warning in this handbook comes from something that actually went wrong, not
+from a hypothetical.</p>
+
+</div>
+</body>
+</html>
