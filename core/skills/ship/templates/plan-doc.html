@@ -107,9 +107,11 @@ ul{margin:8px 0;padding-left:22px}
     <a href="#s1"><span class="num">1</span>Tổng quát</a>
     <a href="#s2"><span class="num">2</span>Phân tích hiện trạng</a>
     <a href="#s3"><span class="num">3</span>Trade-offs</a>
+    <a href="#s3b"><span class="num">3b</span>Module sẽ sửa</a>
     <a href="#s4"><span class="num">4</span>Plan theo phase</a>
     <a href="#s5"><span class="num">5</span>Risks</a>
     <a href="#s6"><span class="num">6</span>Điểm cần chốt</a>
+    <a href="#s7"><span class="num">7</span>Ngoài phạm vi</a>
   </nav>
   <div class="side-note">{{Bối cảnh 1 dòng: đã ground bằng N agent ngày X · mọi file:line verify trên base origin/master}}</div>
 </aside>
@@ -133,12 +135,12 @@ ul{margin:8px 0;padding-left:22px}
 <tr><th style="width:130px">&nbsp;</th><th>Nội dung</th></tr>
 <tr><td><b>Thấy gì</b></td><td>{{triệu chứng + số thật · VD: log refund hiện <code>Refunded amount $18 · Order remaining $50</code>}}</td></tr>
 <tr><td><b>Đáng lẽ</b></td><td>{{con số/hành vi đúng · VD: 18 + 50 phải = 60, bằng <code>Subtotal: $60</code> ở dòng earn ngay trên}}</td></tr>
-<tr><td><b>Setting</b></td><td>{{field setting nào, đang bật hay tắt · VD: "Reward points for additional fee" = TẮT}}</td></tr>
+<tr><td><b>Setting</b></td><td>{{field setting nào, đang bật hay tắt · VD: "Áp dụng cho phí phụ thu" = TẮT}}</td></tr>
 <tr><td><b>Field sai</b></td><td>{{tên field · giá trị thật · nguồn · VD: <code>totalTransactionRefund</code>=18 (GROSS, gồm ship) vs <code>current_subtotal_price</code>=50 (NET)}}</td></tr>
-<tr><td><b>Chỗ hỏng</b></td><td>{{1 câu + file:line · VD: hai số cùng một dòng lấy từ hai gốc khác nhau — <code>ordersController.js:1569</code>}}</td></tr>
+<tr><td><b>Chỗ hỏng</b></td><td>{{1 câu + file:line · VD: hai số cùng một dòng lấy từ hai gốc khác nhau — <code>orderController.js:1569</code>}}</td></tr>
 </table>
 <p class="muted"><b>Luồng</b> (đúng 1 dòng, mỗi chặng kèm <code>file:line</code>; đọc dòng này là đi lại được):<br>
-<code>{{webhook orders/updated → ordersController.js:1547 (ghi activity) → computeRemaining.js:12 (tính remaining) → renderRow.js:148 (render timeline)}}</code></p>
+<code>{{webhook orders/updated → orderController.js:1547 (ghi activity) → getOrderRemainingSubTotal.js:12 (tính remaining) → prepareContent.js:148 (render timeline)}}</code></p>
 <p class="muted"><b>Tự kiểm trước khi nộp</b> — dev chưa từng đụng luồng này đọc xong trả lời được cả 3?
 (1) field nào sai, giá trị thật bao nhiêu · (2) shop bật/tắt gì thì bug mới hiện · (3) sửa file nào, dòng nào.
 Thiếu câu nào → viết lại, đừng nộp.</p>
@@ -163,8 +165,26 @@ Thiếu câu nào → viết lại, đừng nộp.</p>
 <h2>3. Trade-offs</h2>
 <table>
 <tr><th>Quyết định</th><th>Option A</th><th>Option B</th><th>Đề xuất + lý do</th></tr>
-<tr><td>{{...}}</td><td>{{ưu/nhược}}</td><td>{{ưu/nhược}}</td><td><b>{{chọn A hay B}}</b> — {{lý do}}</td></tr>
+<tr><td>{{...}}</td><td>{{ưu/nhược}}</td><td>{{ưu/nhược}}</td><td><b>{{A}}</b> — {{lý do}}</td></tr>
 </table>
+</section>
+
+<section class="card" id="s3b">
+<h2>3b. Module sẽ sửa</h2>
+<!--
+  Bản đồ module, viết TRƯỚC khi chia phase. Phase phải cắt THEO bản đồ này,
+  không phải ngược lại. Đây là chỗ kiểm soát kiến trúc: lúc mọi thứ còn là chữ.
+  Chờ tới review code mới nhận ra cắt sai module thì đã muộn, code viết xong rồi.
+  Mỗi dòng là một module CÓ THẬT trên cây (verify, đừng nhớ ra).
+-->
+<table>
+<tr><th>Module</th><th>Sửa / Mới</th><th>Vì sao đụng tới</th><th>Ai khác đang dùng</th></tr>
+<tr><td><code>{{helpers/program/regionResolver.js}}</code></td><td>{{sửa}}</td><td>{{...}}</td><td>{{surface/adapter nào cũng gọi — hoặc "chỉ luồng này"}}</td></tr>
+</table>
+<p class="muted"><b>Cột "ai khác đang dùng" là cột đắt nhất.</b> Component/helper dùng chung là nguồn
+lỗi đắt nhất: xoá một <code>@property</code> mà chỉ MỘT caller còn truyền, thế là chết những
+setting người dùng thật đang bật ở một surface khác. Không điền nổi cột đó nghĩa là chưa grep,
+chưa được chia phase.</p>
 </section>
 
 <section class="card" id="s4">
@@ -193,6 +213,23 @@ Thiếu câu nào → viết lại, đừng nộp.</p>
 <tr><th>#</th><th>Vấn đề</th><th>Lựa chọn</th></tr>
 <tr><td>Q1</td><td>{{...}}</td><td>{{A / B — kèm đề xuất}}</td></tr>
 </table>
+</section>
+
+<section class="card" id="s7">
+<h2>7. Ngoài phạm vi</h2>
+<!--
+  Chép từ analysis.md §6 nửa "KHÔNG làm". Đây là DEFINITION OF DONE: không có mục này
+  thì task không bao giờ kết thúc, vì lúc nào cũng còn thứ có thể làm thêm.
+  KHÁC với §3 Trade-offs: §3 ghi "ngã ba, chọn A bỏ B"; mục này ghi "ranh giới, X không làm".
+  Cấm để trống. Thật sự không có gì ngoài phạm vi là chuyện gần như không xảy ra;
+  để trống thường nghĩa là chưa ai hỏi "cái gì KHÔNG nằm trong task này".
+-->
+<table>
+<tr><th>Không làm</th><th>Vì sao</th><th>Sẽ quay lại?</th></tr>
+<tr><td>{{tên phần liên quan nhưng KHÔNG làm ở task này}}</td><td>{{...}}</td><td>{{task riêng / chưa có nhu cầu / chờ xác nhận}}</td></tr>
+</table>
+<p class="muted">Mỗi dòng ở đây cứu một cuộc tranh luận lặp lại: thiếu nó thì hai tuần sau có người
+(hoặc chính AI) đề xuất lại đúng thứ đã bị loại, và không ai còn nhớ vì sao đã loại.</p>
 </section>
 
 </div>
