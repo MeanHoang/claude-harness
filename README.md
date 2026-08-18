@@ -1,4 +1,4 @@
-# claude-harness
+# skill
 
 A Claude Code harness for running **several specialised sessions in parallel on one feature**:
 scout, coder, research, reviewer, ux, checker — each in its own terminal tab, all on one git
@@ -10,8 +10,8 @@ traps that cost real time. Open it in a browser; it is the real documentation.
 ## Install
 
 ```bash
-git clone https://github.com/MeanHoang/claude-harness ~/claude-harness
-cd ~/claude-harness
+git clone https://github.com/MeanHoang/skill ~/skill
+cd ~/skill
 
 ./install.sh /path/to/project           # copy into the project (default)
 ./install.sh /path/to/project --link    # symlink instead, one shared source
