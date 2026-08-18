@@ -24,7 +24,7 @@ they carry per-project permissions and hook wiring; wire the hooks by hand after
 
 ## What you get
 
-13 skills, 7 hooks, 5 scripts. A development workflow, not a dev-stack setup: nothing here
+16 skills, 9 hooks, 7 scripts. A development workflow, not a dev-stack setup: nothing here
 knows how your app boots, and nothing is tied to a particular product.
 
 **Running work in parallel**
@@ -47,17 +47,26 @@ audit, with the per-hunk technique that avoids the `--theirs` data-loss trap)
 customer) · `surface-audit` (a coverage-audit method so a feature does not ship to four surfaces
 when it has five)
 
+**Deciding what to build, and how to run it**
+`feature-review` (roast a feature BEFORE it is built: premise → output vs outcome → Build / Reframe /
+Kill) · `sdd-model-tiers` (pick a model tier per task, so a cheap task does not run at the price of a
+hard one) · `agent-harness-review` (audit this whole setup — CLAUDE.md, agents, skills, hooks — and
+score it)
+
 **Housekeeping**
 `update-handle` (mirror what you just did onto a markdown kanban card) · `skill-creator` (scaffold
 a new skill)
 
 **Hooks** — `readonly-intent-guard` (deny writes when the session was told to only read) ·
 `branch-guard` · `memory-consent` · `commit-consent` (ships disabled) · `auto-lint` (lints only the
-lines actually changed) · `block-dangerous-bash` · `recursion-guard`
+lines actually changed) · `block-dangerous-bash` · `recursion-guard` · `ship-state-sync` (records the
+session id so a shutdown does not cost you the conversation) · `ship-context-restore` (after a
+compact, points the session back at the file instead of at its own summary)
 
 **Scripts** — `feature-open.sh` · `bootstrap-worktree.sh` (equip a fresh worktree so agents run
-under the guards) · `ship-board.sh` · `shot.sh` (screenshots that do not flood the context) ·
-`env_loader.py`
+under the guards) · `ship-board.sh` · `cmux-say.sh` (send a message between sessions and VERIFY it
+was submitted) · `ram-guard.sh` (warn before opening another session, using this machine's last real
+OOM as the threshold) · `shot.sh` (screenshots that do not flood the context) · `env_loader.py`
 
 ## Fill in your own values
 

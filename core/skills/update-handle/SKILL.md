@@ -1,6 +1,6 @@
 ---
 name: update-handle
-description: "Sync the current work in this the code repo back to the update-handle board (../update-handle), then commit & push it. Use when the user says '/update-handle', 'update doc', 'cập nhật board', 'sync handle', 'làm đến đâu update đến đó', or after finishing a phase/commit and wanting the kanban card to reflect progress. Reverse direction of the old hub-orchestrates flow: code lives here, the card is updated FROM here."
+description: "Sync the current work in this code repo back to the update-handle board (../update-handle), then commit & push it. Use when the user says '/update-handle', 'update doc', 'cập nhật board', 'sync handle', 'làm đến đâu update đến đó', or after finishing a phase/commit and wanting the kanban card to reflect progress. Reverse direction of the old hub-orchestrates flow: code lives here, the card is updated FROM here."
 ---
 
 # update-handle — push progress from the code → update-handle board
@@ -14,7 +14,7 @@ This skill runs **from inside a code repo** (any working copy, including numbere
 1. **Never auto-bump `status`.** Only step 1 (`gather`/`localize`) may auto-advance — and that happens in the hub, not here. Update progress + `branch`/`mr`/`updated` freely; bump `status` (or `env`) **only when the user explicitly says OK in this conversation.** If the work looks done but they haven't said move it, leave `status` as-is and say so.
 2. **Notes here are lighter than the repo's output.** Summarize: what got done, why this approach, open bugs + which env. **Link the branch/MR — never hand-paste code.** Git is the source of truth.
 3. **Surgical card edits.** Touch the card you're updating. Don't reformat other cards or restructure the board.
-4. **The commit+push targets `../update-handle` only** — never the the code code repo. (Auto-commit here is intended; it does not touch the code's git.)
+4. **The commit+push targets `../update-handle` only** — never the code repo. (Auto-commit here is intended; it does not touch the code repo's git.)
 
 ## Workflow
 
@@ -37,10 +37,10 @@ Never guess across the wrong repo — a card's `repo:` must match where the code
 - **Progress lens** — append/refresh the relevant file, matching the template's existing structure & tone:
   - feature → `dev.md` (tick done parts, note the phase, open bug + env). Plan/review belong in `plan.md`/`review.md` if that's what changed.
   - bug → `fix.md` (Nguyên nhân / Giải pháp / Tiến độ-retest, which env is failing).
-- Keep the code's 5 expensive-mistake reminders in mind when summarizing (shopId scoping · webhook ≤5s · Firestore index · `/translate` for new strings · bulk API 500+) — flag any that apply as an open item.
+- Keep your project's own expensive-mistake reminders in mind when summarizing (whatever CLAUDE.md lists — tenant scoping, webhook deadlines, index coverage, translations, bulk limits) — flag any that apply as an open item.
 
 ### 4. Commit & push to update-handle
-Run git **inside `../update-handle`** (use `git -C ../update-handle ...` so the the code shell cwd is untouched):
+Run git **inside `../update-handle`** (use `git -C ../update-handle ...` so the code repo's shell cwd is untouched):
 
 ```bash
 git -C ../update-handle add tasks/<slug>
