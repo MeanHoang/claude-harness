@@ -2,7 +2,7 @@
 # PostToolUse(Write|Edit): eslint --fix the edited file, but ONLY keep fixes that land
 # on lines this branch actually changed.
 #
-# Ratchet trace: "check xem có vài diff bị sửa do eslint bạn chạy đấy" — a whole-file
+# Ratchet trace: the user noticing "some of those diff hunks were changed by the eslint you ran" — a whole-file
 # --fix reformats untouched legacy lines, which buries the real change in review noise.
 #
 # Monorepo: per-package .eslintrc.js, and eslint v6 resolves plugins from CWD,

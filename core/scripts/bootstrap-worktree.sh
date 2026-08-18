@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# Trang bị harness cho một git worktree vừa tạo.
+# Equip a freshly created git worktree with the harness.
 #
-# Vì sao cần: `git worktree add` chỉ checkout file TRACKED, mà gần như toàn bộ harness
-# của repo này lại untracked (nhiều skill gồm cả ship, 3 hook local, settings.local.json,
-# .claude/ship). Một session chạy trong worktree "trần" sẽ không có ship, không có
-# gate nào, và auto-lint chạy bản HEAD reformat cả file — tức là agent chạy KHÔNG LUẬT.
+# Why: `git worktree add` checks out TRACKED files only, and most of a harness is typically
+# untracked (skills including ship, local hooks, settings.local.json, .claude/ship). A session
+# running in a bare worktree has no pipeline, no gates, and gets the HEAD version of auto-lint
+# that reformats whole files. That is an agent running under NO RULES.
 #
-# Cách dùng:
+# Usage:
 #   git worktree add ~/cmux/worktrees/<repo>/<slug> -b <type>/<slug>
 #   .claude/scripts/bootstrap-worktree.sh ~/cmux/worktrees/<repo>/<slug>
 #
-# Cơ chế: symlink cho thứ dùng chung (sửa ở main là mọi worktree có ngay), copy cho thứ
-# mỗi worktree phải có bản riêng (.env, auto-lint.sh).
+# Mechanism: symlink whatever is shared (edit it in main and every worktree has it at once),
+# copy whatever each worktree needs its own copy of (.env, auto-lint.sh).
 
 set -uo pipefail
 
 WT="${1:-}"
 if [ -z "$WT" ]; then
-  echo "dùng: $0 <đường-dẫn-worktree>" >&2
+  echo "usage: $0 <worktree-path>" >&2
   exit 1
 fi
-WT=$(cd "$WT" 2>/dev/null && pwd) || { echo "không thấy worktree: ${1}" >&2; exit 1; }
+WT=$(cd "$WT" 2>/dev/null && pwd) || { echo "no such worktree: ${1}" >&2; exit 1; }
 
 MAIN=$(git -C "$WT" worktree list --porcelain | awk '/^worktree /{print $2; exit}')
-[ -d "$MAIN" ] || { echo "không xác định được checkout chính" >&2; exit 1; }
-[ "$MAIN" = "$WT" ] && { echo "đây là checkout chính, không cần bootstrap" >&2; exit 1; }
+[ -d "$MAIN" ] || { echo "could not determine the main checkout" >&2; exit 1; }
+[ "$MAIN" = "$WT" ] && { echo "this is the main checkout; nothing to bootstrap" >&2; exit 1; }
 
 ok=0; skip=0
-link() {  # link <đường-dẫn-tương-đối>
+link() {  # link <relative-path>
   local rel=$1 src="$MAIN/$1" dst="$WT/$1"
   [ -e "$src" ] || { skip=$((skip+1)); return; }
-  [ -e "$dst" ] && [ ! -L "$dst" ] && { echo "  ĐỤNG ĐỘ (đã tồn tại, bỏ qua): $rel"; skip=$((skip+1)); return; }
+  [ -e "$dst" ] && [ ! -L "$dst" ] && { echo "  CONFLICT (already exists, skipped): $rel"; skip=$((skip+1)); return; }
   mkdir -p "$(dirname "$dst")"
   ln -sfn "$src" "$dst"
   echo "  link  $rel"
@@ -41,69 +41,69 @@ echo "main:     $MAIN"
 echo "worktree: $WT"
 echo
 
-# --- 1. Hook local (untracked ở main -> worktree không có) ---
-echo "[1] hook local"
+# --- 1. Local hooks (untracked in main -> absent from the worktree) ---
+echo "[1] local hooks"
 for h in "$MAIN"/.claude/hooks/*.sh; do
   rel=".claude/hooks/$(basename "$h")"
   git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
 done
 
-# --- 2. Wiring hook + quyền ---
+# --- 2. Hook wiring + permissions ---
 echo "[2] settings.local.json"
 link ".claude/settings.local.json"
 
-# --- 3. Skill untracked (ship, analyze-task, ...) ---
-echo "[3] skill untracked"
+# --- 3. Untracked skills (ship, analyze-task, ...) ---
+echo "[3] untracked skills"
 for d in "$MAIN"/.claude/skills/*/; do
   rel=".claude/skills/$(basename "$d")"
   git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
 done
 
-# --- 3b. Script untracked (cmux-say.sh, ram-guard.sh, ship-board.sh, ...) ---
-# Role template gọi "$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh"; thiếu nó
-# thì mọi lần gọi role khác đều im lặng thất bại.
-echo "[3b] script untracked"
+# --- 3b. Untracked scripts (cmux-say.sh, ram-guard.sh, ship-board.sh, ...) ---
+# Role templates call "$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh". Without it
+# every call from one role to another fails silently.
+echo "[3b] untracked scripts"
 for s in "$MAIN"/.claude/scripts/*; do
   rel=".claude/scripts/$(basename "$s")"
   git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
 done
 
-# --- 3c. Dữ liệu + command untracked (.claude/surfaces, .claude/commands) ---
-# surfaces/ là DỮ LIỆU skill đọc (bản đồ surface của surface-audit), không phải skill,
-# nên vòng [3] ở trên không bắt được.
-echo "[3c] surfaces + command untracked"
+# --- 3c. Untracked data + commands (.claude/surfaces, .claude/commands) ---
+# surfaces/ is DATA a skill reads (surface-audit's inventory), not a skill itself, so loop [3]
+# above does not catch it.
+echo "[3c] untracked surfaces + commands"
 link ".claude/surfaces"
 for c in "$MAIN"/.claude/commands/*.md; do
   rel=".claude/commands/$(basename "$c")"
   git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
 done
 
-# --- 4. State của các ship (cha cần nhìn xuyên mọi feature -> dùng chung 1 chỗ) ---
-echo "[4] .claude/ship (dùng chung với main)"
+# --- 4. Pipeline state (the parent must see across every feature -> one shared location) ---
+echo "[4] .claude/ship (shared with main)"
 link ".claude/ship"
 
-# --- 5. auto-lint.sh: bản local bị skip-worktree nên worktree nhận bản HEAD (lint cả file).
-#        Phải COPY đè + skip-worktree trong chính worktree này. ---
-echo "[5] auto-lint.sh (copy đè bản chỉ-lint-dòng-đã-đổi)"
+# --- 5. auto-lint.sh: the local version is skip-worktree'd, so a worktree gets the HEAD version
+#        that lints whole files. COPY over it and skip-worktree it inside this worktree. ---
+echo "[5] auto-lint.sh (copy over the changed-lines-only version)"
 if grep -q "difflib" "$MAIN/.claude/hooks/auto-lint.sh" 2>/dev/null; then
   cp "$MAIN/.claude/hooks/auto-lint.sh" "$WT/.claude/hooks/auto-lint.sh"
   git -C "$WT" update-index --skip-worktree .claude/hooks/auto-lint.sh 2>/dev/null \
     && echo "  copy + skip-worktree  .claude/hooks/auto-lint.sh" && ok=$((ok+1))
 else
-  echo "  ⚠ auto-lint.sh ở main KHÔNG phải bản range-limited — bỏ qua"
+  echo "  ! auto-lint.sh in main is NOT the range-limited version, skipping"
   skip=$((skip+1))
 fi
 
-# --- 5b. node_modules + .shopify: SYMLINK từ main ---
-# Thiếu chúng thì worktree không chạy được yarn / shopify app deploy, nên phải quay về
-# checkout chính — mà branch lại đang bị chính worktree này giữ, thành vòng luẩn quẩn:
-# muốn deploy tay thì phải XOÁ worktree. Symlink là cách cắt vòng đó.
-# Bắt buộc symlink chứ không copy: riêng node_modules gốc đã 3.5 GB.
-echo "[5b] node_modules + .shopify (symlink, cắt phụ thuộc vào checkout chính)"
+# --- 5b. node_modules + .shopify: SYMLINK from main ---
+# Without them the worktree cannot run the package manager or a deploy, which forces you back to
+# the main checkout, whose branch this very worktree is holding. That circle ends with deleting
+# the worktree just to deploy by hand. Symlinks cut it.
+# Symlink rather than copy is mandatory: the root node_modules alone is 3.5 GB.
+echo "[5b] node_modules + .shopify (symlink, so the worktree stops depending on main)"
 link_nm() {
   local rel=$1 src="$MAIN/$1" dst="$WT/$1"
   [ -d "$src" ] || return
-  [ -e "$dst" ] && [ ! -L "$dst" ] && return      # worktree tự cài rồi thì để yên
+  [ -e "$dst" ] && [ ! -L "$dst" ] && return      # the worktree installed its own; leave it
   mkdir -p "$(dirname "$dst")"
   ln -sfn "$src" "$dst"
 }
@@ -114,17 +114,17 @@ for d in "$MAIN"/node_modules "$MAIN"/packages/*/node_modules "$MAIN"/extensions
 done
 echo "  link  $nm × node_modules (root + packages + extensions)"
 ok=$((ok+nm))
-# .shopify giữ project.json (dev_store_url, client_id), cert localhost và cache deploy.
-# Không có nó thì `shopify app deploy` không biết deploy vào app nào.
+# .shopify holds project.json (which app/tenant this repo deploys to), the localhost cert and
+# the deploy cache. Without it a deploy does not know which app it belongs to.
 if [ -d "$MAIN/.shopify" ] && { [ ! -e "$WT/.shopify" ] || [ -L "$WT/.shopify" ]; }; then
   ln -sfn "$MAIN/.shopify" "$WT/.shopify"
   echo "  link  .shopify"
   ok=$((ok+1))
 fi
 
-# --- 6. File env theo .worktreeinclude (git worktree add không tự copy — đó là tính năng
-#        của `claude -w`, còn skill cmux lại tạo worktree thủ công) ---
-echo "[6] file env theo .worktreeinclude"
+# --- 6. env files listed in .worktreeinclude (git worktree add does not copy them; that is a
+#        `claude -w` feature, and this workflow creates its worktrees by hand) ---
+echo "[6] env files per .worktreeinclude"
 if [ -f "$MAIN/.worktreeinclude" ]; then
   while IFS= read -r pat; do
     case "$pat" in ''|\#*) continue ;; esac
@@ -136,10 +136,10 @@ if [ -f "$MAIN/.worktreeinclude" ]; then
     done
   done < "$MAIN/.worktreeinclude"
 else
-  echo "  (không có .worktreeinclude)"
+  echo "  (no .worktreeinclude)"
 fi
 
-# --- Kiểm chứng: những thứ BẮT BUỘC phải có mặt ---
+# --- Verify: what MUST be present ---
 echo
 echo "[verify]"
 fail=0
@@ -149,8 +149,8 @@ must=(
   ".claude/scripts/cmux-say.sh"
   ".claude/settings.local.json"
 )
-# Project nào cần thêm thì liệt kê trong .claude/harness-required.txt (mỗi dòng 1 đường dẫn).
-# Nhờ vậy skill riêng của từng repo không phải hardcode vào script dùng chung.
+# A project needing more lists it in .claude/harness-required.txt, one path per line. That keeps
+# any one repo's skill names out of this shared script.
 if [ -f "$MAIN/.claude/harness-required.txt" ]; then
   while IFS= read -r extra; do
     case "$extra" in ''|\#*) continue ;; esac
@@ -158,15 +158,15 @@ if [ -f "$MAIN/.claude/harness-required.txt" ]; then
   done < "$MAIN/.claude/harness-required.txt"
 fi
 for m in "${must[@]}"; do
-  if [ -e "$WT/$m" ]; then echo "  ✓ $m"; else echo "  ✗ THIẾU $m"; fail=1; fi
+  if [ -e "$WT/$m" ]; then echo "  OK  $m"; else echo "  !!  MISSING $m"; fail=1; fi
 done
 if grep -q "difflib" "$WT/.claude/hooks/auto-lint.sh" 2>/dev/null; then
-  echo "  ✓ auto-lint.sh (bản chỉ lint dòng đã đổi)"
+  echo "  OK  auto-lint.sh (changed-lines-only version)"
 else
-  echo "  ✗ auto-lint.sh vẫn là bản lint cả file"; fail=1
+  echo "  !!  auto-lint.sh is still the whole-file version"; fail=1
 fi
 
 echo
-echo "xong: $ok mục, bỏ qua $skip"
-[ $fail -eq 0 ] || { echo "⛔ worktree CHƯA đủ harness — đừng chạy session ở đây"; exit 1; }
-echo "✅ worktree đã đủ harness"
+echo "done: $ok items, $skip skipped"
+[ $fail -eq 0 ] || { echo "STOP: this worktree is missing part of the harness. Do not run a session here."; exit 1; }
+echo "OK: worktree fully equipped"

@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Stop hook — ghi lại DẤU VẾT KỸ THUẬT của session vào khối `<!-- state -->` của progress.md.
+# Stop hook: record the session's TECHNICAL TRAIL in the `<!-- state -->` block of progress.md.
 #
-# Vì sao cần: tắt máy là mất tiến trình, và cmux chỉ khôi phục giao diện chứ không khôi phục
-# session. Sáng hôm sau muốn `claude --resume` thì phải đi mò tên file trong
-# ~/.claude/projects/. Ghi sẵn session id vào đúng chỗ đang theo dõi đầu việc là hết mò.
-# Cũng là lưới an toàn cho compact: sau khi context bị tóm tắt, file vẫn còn.
+# Why: shutting the machine down loses the session, and cmux restores the layout but not the
+# conversation. Resuming next morning otherwise means hunting for a filename under
+# ~/.claude/projects/. Writing the session id into the file that already tracks this piece of
+# work removes the hunt. It doubles as a safety net for compaction: after the context is
+# summarised, the file is still there.
 #
-# CỐ Ý KHÔNG ghi nhật ký công việc vào progress.md. File đó là DANH SÁCH ĐẦU VIỆC để
-# người và agent đọc mà biết phải làm gì tiếp — nhét log vào là làm phình đúng thứ vừa
-# được dọn. Lý do / quyết định thuộc về decisions.md, và đó là việc của model, không
-# phải của hook. Hook chỉ đụng metadata trong comment.
+# It DELIBERATELY writes no work log into progress.md. That file is the TO-DO LIST a human and
+# an agent read to know what comes next; pouring log lines into it inflates exactly the file
+# that was just pruned. Reasons and decisions belong in decisions.md, and writing those is the
+# model's job, not a hook's. This hook touches only metadata inside the comment block.
 #
-# Luôn exit 0 — không bao giờ chặn.
+# Always exits 0. It can never block.
 
 set -uo pipefail
 INPUT=$(cat 2>/dev/null || true)
@@ -46,8 +47,8 @@ ship = os.path.join(root, ".claude", "ship")
 if not os.path.isdir(ship):
     sys.exit(0)
 
-# Đầu việc nào? Khớp theo BRANCH trong khối state — tên thư mục không đáng tin
-# (checkout chính không mang tên slug).
+# Which piece of work is this? Match on the BRANCH recorded in the state block. The directory
+# name is not reliable: the main checkout is not named after a slug.
 target = None
 for slug in sorted(os.listdir(ship)):
     p = os.path.join(ship, slug, "progress.md")

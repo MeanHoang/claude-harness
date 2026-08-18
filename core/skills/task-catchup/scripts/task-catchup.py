@@ -233,10 +233,10 @@ def print_report(tasks, hours, slack_token):
     active = [t for t in tasks if t["notion"] or t["slack"]]
     quiet = [t for t in tasks if not t["notion"] and not t["slack"]]
 
-    print(f"\n📡 Task catch-up — last {hours}h  ({len(active)} với hoạt động / {len(tasks)} task)\n")
+    print(f"\n📡 Task catch-up — last {hours}h  ({len(active)} with activity / {len(tasks)} tasks)\n")
     if not slack_token:
-        print("  ⚠️  SLACK_USER_TOKEN (xoxp) chưa set → bỏ qua Slack. Thêm token có scope"
-              " search:read vào .env.agent để bật.\n")
+        print("  ⚠️  SLACK_USER_TOKEN (xoxp) is not set, skipping Slack. Add a token with the"
+              " search:read scope to .env.agent to enable it.\n")
 
     for t in active:
         print(f"● {t['title']}")
@@ -246,7 +246,7 @@ def print_report(tasks, hours, slack_token):
         print()
 
     if quiet:
-        print("── Không có hoạt động mới:")
+        print("-- No new activity:")
         for t in quiet:
             print(f"   · {t['slug']}")
     print()

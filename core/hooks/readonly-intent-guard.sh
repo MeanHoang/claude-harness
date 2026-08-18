@@ -49,7 +49,7 @@ decode_json_line() {
 }
 
 # --- Fold to lowercase ASCII so patterns stay plain ---
-# "Đừng SỬA vội" → "dung sua voi". Hand-written classes like [uư] miss tone marks
+# "Đừng SỬA vội" -> "dung sua voi". Hand-written classes like [uư] miss tone marks
 # (ử, ừ), so normalize once instead and match ASCII. NFD splits the tone mark off
 # the vowel; đ has no decomposition, so it is mapped explicitly.
 normalize() {
@@ -96,7 +96,7 @@ msg_w=$(printf '%s' "$msg" | sed -E 's/sua (voi|gi|j|nua|dau|nhe|ma)([^a-z]|$)/s
 
 if printf '%s' "$msg" | grep -qE "$readonly_pat"; then
   if ! printf '%s' "$msg_w" | grep -qE "$write_pat"; then
-    reason="⛔ Prompt hiện tại là READ-ONLY (phát hiện tín hiệu: check/đừng sửa/phân tích). Báo cáo phát hiện rồi DỪNG — xin xác nhận trước khi sửa."
+    reason="STOP: the current prompt is READ-ONLY (signals detected: check / do not edit / analyse). Report what you found and STOP; ask for confirmation before editing."
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$reason"
     exit 0
   fi

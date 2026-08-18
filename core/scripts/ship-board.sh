@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Bảng mọi feature đang chạy — feature nào ĐANG CHỜ user xếp lên đầu.
+# A table of every running feature, with whatever is WAITING ON YOU sorted to the top.
 #
-# Vì sao cần: mỗi task một progress.md, muốn biết cái nào chờ mình phải mở từng file.
-# Khi chạy nhiều feature song song thì nút thắt là user, nên thứ cần thấy trước tiên là
-# "cái nào đang chờ tôi", không phải "cái nào đang chạy".
+# Why: each task has its own progress.md, so finding out what needs you means opening every file
+# in turn. Once several features run in parallel the bottleneck is the user, so the first thing
+# to show is "what is waiting on me", not "what is running".
 #
-# Đọc khối `<!-- state ... -->` ở đầu progress.md (feature-team/templates/progress-header.md).
-# Task cũ chưa có khối đó vẫn hiện, cột state để "—".
-
+# Reads the `<!-- state ... -->` block at the top of progress.md
+# (feature-team/templates/progress-header.md). Older tasks without that block still appear, with
+# their state columns showing "-".
 #
-# Cờ: --unstick  bấm Enter/Escape hộ những tab đang kẹt (mặc định chỉ BÁO, không đụng).
+# Flag: --unstick  press Enter/Escape for stuck tabs (by default it only REPORTS, touching nothing).
 
 set -uo pipefail
 UNSTICK=0; [ "${1:-}" = "--unstick" ] && UNSTICK=1
-ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "không ở trong git repo" >&2; exit 1; }
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not inside a git repo" >&2; exit 1; }
 
-# RAM trước tiên: session biến mất giữa chừng gần như luôn là OOM, không phải lỗi cmux.
+# RAM first: a session vanishing mid-run is almost always the OOM killer, not a cmux fault.
 [ -x "$ROOT/.claude/scripts/ram-guard.sh" ] && "$ROOT/.claude/scripts/ram-guard.sh"
 
 python3 - "$ROOT" <<'PY'
@@ -23,8 +23,8 @@ import glob, os, re, subprocess, sys
 
 root = sys.argv[1]
 rows = []
-# Tên repo hiện tại — worktree của mọi đầu việc nằm ở ~/cmux/worktrees/<repo>/<slug>,
-# nên suy từ đây thay vì hard-code, script chạy được ở bất kỳ project nào.
+# Current repo name. Every task's worktree lives at ~/cmux/worktrees/<repo>/<slug>, so derive it
+# here instead of hardcoding, and the script runs in any project.
 _repo = os.path.basename(os.path.abspath(root))
 
 for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
@@ -38,7 +38,7 @@ for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
 
     has_state = "<!-- state" in head
     branch = field("branch")
-    if branch == "—":                       # task cũ: lấy từ dòng "- Branch: `...`"
+    if branch == "—":                       # older task: read it from the "- Branch: `...`" line
         m = re.search(r"Branch:\s*`([^`]+)`", txt)
         branch = m.group(1) if m else "—"
 
@@ -50,37 +50,38 @@ for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
     kind = field("kind", "feature") if has_state else "—"
     verdict = field("verdict", "-") if has_state else "-"
 
-    # NOW marker: dòng người đọc, cắt ngắn
+    # NOW marker: the human-readable line, truncated
     m = re.search(r"^>\s*\*\*NOW:?\*\*:?\s*(.+)$", txt, re.M)
     now = (m.group(1).strip() if m else "")[:70]
 
     done = txt.count("✅")
     todo = txt.count("⬜")
 
-    # Tuổi + kích thước session con. Session sống quá lâu = context phình = chậm và đắt,
-    # và nó vẫn chạy theo kickoff LÚC KHỞI ĐỘNG nên không thấy luật thêm sau đó.
+    # Age and size of the child session. A session alive too long means a bloated context,
+    # slow and expensive, still running against the kickoff it was BORN with and blind to any
+    # rule added since.
     age_h, sess_mb, resume_id = None, 0, ""
-    # Claude đặt tên thư mục project bằng đường dẫn tuyệt đối, thay "/" bằng "-".
+    # Claude names its project directory after the absolute path, with "/" replaced by "-".
     _wt = os.path.expanduser("~/cmux/worktrees/%s/%s" % (_repo, slug))
     pdir = os.path.expanduser("~/.claude/projects/" + _wt.replace("/", "-"))
     if os.path.isdir(pdir):
         import glob as _g
-        # id để `claude --resume` — transcript được ghi gần đây nhất.
-        # Tắt máy là mất tiến trình, cmux chỉ khôi phục giao diện; không có id này thì
-        # sáng hôm sau phải đi mò trong ~/.claude/projects.
+        # The id for `claude --resume`: the most recently written transcript.
+        # Shutting down loses the session and cmux restores only the layout, so without this id
+        # you spend the next morning digging through ~/.claude/projects.
         js = _g.glob(pdir + "/*.jsonl")
         if js:
             resume_id = os.path.basename(max(js, key=os.path.getmtime))[:-6]
         for jf in js:
             mb = os.path.getsize(jf) / 1024 / 1024
-            if mb < 0.5:            # bỏ qua session con lặt vặt của skill
+            if mb < 0.5:            # ignore the tiny child sessions a skill spawns
                 continue
             sess_mb = max(sess_mb, mb)
             try:
                 import json as _j, datetime as _d
                 with open(jf, errors="replace") as fh:
                     for i, line in enumerate(fh):
-                        if i > 400:            # timestamp không nằm ngay dòng đầu
+                        if i > 400:            # the timestamp is not on the very first line
                             break
                         if '"timestamp"' not in line:
                             continue
@@ -99,10 +100,10 @@ for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
                      done=done, todo=todo, age_h=age_h, sess_mb=sess_mb,
                      resume_id=resume_id))
 
-# ưu tiên: đang chờ user > đang chạy > xong
+# priority: waiting on the user > running > done
 def rank(r):
     if r["gate"] not in ("none", "—"): return 0
-    if r["awaiting"] == "user": return 0          # bug đã có verdict, chờ user phán
+    if r["awaiting"] == "user": return 0          # a bug with a verdict, waiting on the user
     if r["awaiting"] not in ("none", "—"): return 1
     return 2
 
@@ -114,14 +115,14 @@ if waiting:
     def why(r):
         if r["gate"] not in ("none", "—"): return r["gate"]
         if r["verdict"] not in ("-", "—"): return r["verdict"]
-        return "chờ anh"
-    print(f"⚠️  {len(waiting)} đầu việc ĐANG CHỜ ANH: " + ", ".join(f"{r['slug']} ({why(r)})" for r in waiting))
+        return "waiting on you"
+    print(f"⚠️  {len(waiting)} item(s) WAITING ON YOU: " + ", ".join(f"{r['slug']} ({why(r)})" for r in waiting))
 else:
-    print("✅ Không có đầu việc nào đang chờ anh.")
+    print("✅ Nothing is waiting on you.")
 print()
 
 w = max([len(r["slug"]) for r in rows] + [7])
-print(f"{'':2}{'ĐẦU VIỆC'.ljust(w)}  {'LOẠI':8} {'GATE':9} {'CHỜ':9} {'KẾT LUẬN':13} {'BƯỚC':6} {'SESSION':11} NOW")
+print(f"{'':2}{'ITEM'.ljust(w)}  {'KIND':8} {'GATE':9} {'AWAITING':9} {'VERDICT':13} {'STEP':6} {'SESSION':11} NOW")
 print("─" * (w + 62))
 for r in rows:
     mark = "🚦" if rank(r) == 0 else ("· " if rank(r) == 1 else "  ")
@@ -134,39 +135,40 @@ for r in rows:
     print(f"{mark}{r['slug'].ljust(w)}  {r['kind']:8} {r['gate']:9} {r['awaiting']:9} "
           f"{r['verdict']:13} {step:6} {sess:11} {r['now'][:52]}")
 
-# Hồi sinh sau khi tắt máy.
-# `cmux restore` chạy lại ARGV GỐC (claude "$(cat kickoff)") — tức là bắt đầu lại từ đầu,
-# mất sạch context. Chỉ `claude --resume <id>` mới giữ được. Hai lệnh không thay nhau được.
+# Reviving a session after a shutdown.
+# `cmux restore` re-runs the ORIGINAL argv (claude "$(cat kickoff)"), which starts over from
+# nothing and loses the whole context. Only `claude --resume <id>` keeps it. The two commands are
+# not interchangeable.
 res = [r for r in rows if r["resume_id"] and rank(r) < 2]
 if res:
-    print("\n── hồi sinh session (sau khi tắt máy / cmux restore) ──")
+    print("\n-- revive a session (after a shutdown / cmux restore) --")
     for r in res:
         print(f"  cd ~/cmux/worktrees/{_repo}/{r['slug']} && claude --resume {r['resume_id']}")
 
-# xuất cho bước tô màu workspace (ghi ra file tạm, bash đọc lại)
+# hand off to the workspace-colouring step (write a temp file, bash reads it back)
 with open("/tmp/ship-board-colors.txt", "w", encoding="utf-8") as fh:
     for r in rows:
-        if r["gate"] == "—":            # task cũ chưa có state → không tô
+        if r["gate"] == "—":            # older task with no state block -> leave it uncoloured
             continue
         fh.write(f"{r['slug']}\t{rank(r)}\t{r['rnd']}\n")
 
 no_state = [r for r in rows if r["gate"] == "—"]
 if no_state:
-    print(f"\n({len(no_state)}/{len(rows)} task chưa có khối `state` — chỉ hiện NOW. Thêm header từ "
-          f"feature-team/templates/progress-header.md để lên bảng đầy đủ.)")
+    print(f"\n({len(no_state)}/{len(rows)} task(s) have no `state` block, so only NOW is shown. Add the "
+          f"header from feature-team/templates/progress-header.md to get the full row.)")
 PY
 
 echo
-echo "── worktree đang mở ──"
+echo "-- open worktrees --"
 git -C "$ROOT" worktree list
 
-# ── Tô màu workspace cmux theo mức cần chú ý ──────────────────────────────
-# Mỗi màu một nghĩa, không tô cho đẹp:
-#   Crimson  đang chờ mình quyết        (gate mở, hoặc bug đã có verdict)
-#   Amber    sắp phải can thiệp         (coder↔reviewer đã 3 vòng, chạm luật kill)
-#   Blue     đang chạy bình thường
-#   Charcoal xong hoặc nằm im
-# Chỉ đụng workspace có TÊN TRÙNG slug — workspace khác của user không bị động tới.
+# -- Colour cmux workspaces by how much attention they need ------------------
+# Each colour means one thing; none of this is decoration:
+#   Crimson  waiting on your decision   (a gate is open, or a bug has a verdict)
+#   Amber    about to need you          (coder<->reviewer hit 3 rounds, the kill rule)
+#   Blue     running normally
+#   Charcoal finished or idle
+# Only workspaces whose NAME MATCHES a slug are touched; your other workspaces are left alone.
 [ -f /tmp/ship-board-colors.txt ] || exit 0
 cmux ping >/dev/null 2>&1 || exit 0
 
@@ -182,29 +184,29 @@ while IFS=$'\t' read -r slug rank rnd; do
   esac
   cmux workspace-action --action set-color --workspace "$ws" --color "$color" >/dev/null 2>&1 && painted=$((painted+1))
 done < /tmp/ship-board-colors.txt
-[ "$painted" -gt 0 ] && echo "── đã tô màu $painted workspace theo trạng thái ──"
+[ "$painted" -gt 0 ] && echo "-- coloured $painted workspace(s) by state --"
 
-# ── Tab nào đang KẸT ────────────────────────────────────────────────────────
-# Trạng thái không nhìn thấy được từ progress.md: message đã gõ vào ô nhập nhưng chưa
-# submit, hoặc một dialog đang nuốt phím. Hai bên cùng chờ nhau, không ai báo gì cả.
+# -- Which tabs are STUCK ----------------------------------------------------
+# A state progress.md cannot show: a message typed into the input box but never submitted, or a
+# dialog swallowing keystrokes. Both sides then wait on each other and neither reports anything.
 SAY="$ROOT/.claude/scripts/cmux-say.sh"
 if [ -x "$SAY" ]; then
   stuck_found=0
   while IFS=$'\t' read -r slug _rank _rnd; do
     out=$("$SAY" status "$slug" 2>/dev/null | grep -E "stuck|dialog") || continue
     [ -n "$out" ] || continue
-    [ "$stuck_found" = 0 ] && echo && echo "── tab đang kẹt (chưa submit / dialog chặn) ──"
+    [ "$stuck_found" = 0 ] && echo && echo "-- stuck tabs (unsubmitted / blocked by a dialog) --"
     stuck_found=1
     echo "  $slug:"; sed 's/^/    /' <<<"$out"
   done < /tmp/ship-board-colors.txt
 
   if [ "$stuck_found" = 1 ]; then
     if [ "$UNSTICK" = 1 ]; then
-      echo "  → gỡ kẹt:"
+      echo "  -> unstick:"
       while IFS=$'\t' read -r slug _r _n; do "$SAY" unstick "$slug" 2>/dev/null | sed 's/^/    /'; done \
         < /tmp/ship-board-colors.txt
     else
-      echo "  (chạy lại với --unstick để bấm Enter/Escape hộ)"
+      echo "  (re-run with --unstick to press Enter/Escape for them)"
     fi
   fi
 fi

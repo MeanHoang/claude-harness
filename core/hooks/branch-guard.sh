@@ -23,15 +23,16 @@ deny() {
   exit 0
 }
 
-# `git` chỉ tính là LỆNH khi đứng đầu chuỗi, hoặc ngay sau ; & | ( — không phải sau
-# khoảng trắng bất kỳ. Nếu không, một lệnh chỉ *nhắc tới* chuỗi "git commit" trong văn bản
-# (viết tài liệu, sửa chính hook này) cũng bị chặn. Đã dính đúng bẫy đó 05/08.
+# `git` counts as a COMMAND only at the start of the string or straight after ; & | ( —
+# not after arbitrary whitespace. Otherwise a command that merely *mentions* "git commit" in
+# text (writing docs, editing this very hook) gets blocked too. That trap fired for real on
+# 2026-08-05.
 G='(^|[;&|(])[[:space:]]*git[[:space:]]+'
 
 # --- 1. stash that swallows untracked files ---
 if printf '%s' "$cmd" | grep -qE "${G}stash" \
    && printf '%s' "$cmd" | grep -qE '(--include-untracked|--all([[:space:]]|$)|(^|[[:space:]])-[a-zA-Z]*[ua][a-zA-Z]*([[:space:]]|$))'; then
-  deny "⛔ git stash -u/--include-untracked nuốt cả file untracked lẫn merge đang dở vào stash^3 — git diff KHÔNG thấy chúng. Dùng git stash push -- <file cụ thể>, hoặc commit tạm trên branch."
+  deny "STOP: git stash -u/--include-untracked swallows untracked files AND an in-progress merge into stash^3, where git diff does NOT show them. Use git stash push -- <specific files>, or a temporary commit on the branch."
 fi
 
 # --- 2. blanket staging ---
@@ -39,7 +40,7 @@ fi
 # The harness symlinks .claude/skills/* into each worktree, so `git add -A` there would
 # commit absolute-path symlinks into the repo.
 if printf '%s' "$cmd" | grep -qE "${G}add[[:space:]]+(-A([[:space:]]|$)|--all([[:space:]]|$)|\.([[:space:]]|$))"; then
-  deny "⛔ Không dùng git add -A / git add . — stage theo đường dẫn file cụ thể. (Trong worktree, add hàng loạt sẽ nuốt cả symlink harness vào repo.)"
+  deny "STOP: do not use git add -A / git add . — stage explicit paths. (In a worktree, a bulk add swallows the harness symlinks into the repo.)"
 fi
 
 # --- 3. commit/push on another task's branch ---
@@ -62,4 +63,4 @@ declared=$(grep -oE 'Branch: *`[^`]+`' "$progress" 2>/dev/null | head -1 | sed -
 [ -n "$declared" ] || exit 0
 [ "$declared" = "$current" ] && exit 0
 
-deny "⛔ Branch hiện tại là '$current' nhưng task '$slug' khai branch '$declared' trong progress.md. Working dir có thể đã bị session khác chuyển branch. Kiểm tra bằng git branch --show-current rồi checkout đúng branch trước khi commit/push."
+deny "STOP: the current branch is '$current' but task '$slug' declares '$declared' in progress.md. Another session may have switched this working directory. Check with git branch --show-current and check out the right branch before you commit or push."

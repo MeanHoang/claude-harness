@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# SessionStart hook (startup | resume | compact) — trỏ session về đúng hồ sơ đầu việc.
+# SessionStart hook (startup | resume | compact): point the session back at the right record.
 #
-# Vì sao cần: compact tóm tắt context bằng chính lời của model, và tóm tắt thì bao giờ cũng
-# mất chi tiết. Session chạy không người trông có thể compact lúc nửa đêm rồi đi tiếp với
-# một bản rút gọn do nó tự viết. Kickoff thì chỉ được đọc MỘT LẦN lúc khởi động nên không
-# cứu được.
+# Why: compaction summarises the context in the model's own words, and every summary drops
+# detail. An unattended session can compact at 3am and carry on from an abridgement it wrote
+# itself. The kickoff file is read ONCE at launch, so it cannot rescue that.
 #
-# Hook này không cố nhồi lại nội dung — nó chỉ chèn ĐỊA CHỈ của sự thật (progress.md +
-# decisions.md) và dòng NOW, để việc đầu tiên sau compact là đọc file chứ không phải đoán.
+# This hook does not try to re-inject the content. It injects the ADDRESS of the truth
+# (progress.md + decisions.md) and the NOW line, so the first move after a compact is to read
+# the file rather than to guess.
 #
-# Luôn exit 0.
+# Always exits 0.
 
 set -uo pipefail
 INPUT=$(cat 2>/dev/null || true)
@@ -55,24 +55,24 @@ if not target:
 
 txt = open(target, encoding="utf-8", errors="replace").read()
 m = re.search(r"^>\s*\*\*NOW:?\*\*:?\s*(.+)$", txt, re.M)
-now = m.group(1).strip() if m else "(chưa có dòng NOW)"
+now = m.group(1).strip() if m else "(no NOW line yet)"
 
 rel = os.path.relpath(target, root)
 dec = os.path.join(os.path.dirname(rel), "decisions.md")
 lines = [
-    f"Đầu việc của branch này: **{slug}**",
-    f"- Đầu việc + trạng thái: `{rel}`",
+    f"This branch's work item: **{slug}**",
+    f"- Work item + state: `{rel}`",
 ]
 if os.path.isfile(os.path.join(root, dec)):
-    lines.append(f"- Quyết định đã chốt / nợ kỹ thuật: `{dec}`")
+    lines.append(f"- Decisions taken / debt accepted: `{dec}`")
 lines.append(f"- NOW: {now}")
 
 if source == "compact":
-    lines.append("Context vừa bị compact — ĐỌC hai file trên trước khi làm tiếp, "
-                 "đừng dựa vào bản tóm tắt.")
+    lines.append("The context was just compacted. READ both files above before continuing; "
+                 "do not rely on the summary.")
 elif source == "resume":
-    lines.append("Session vừa được resume — đối chiếu hai file trên với việc đang dở "
-                 "trước khi làm tiếp.")
+    lines.append("This session was just resumed. Check both files above against the work in "
+                 "progress before continuing.")
 
 print(json.dumps({"hookSpecificOutput": {
     "hookEventName": "SessionStart",
