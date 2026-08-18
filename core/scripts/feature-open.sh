@@ -42,6 +42,17 @@ if [ "$MAIN_MODE" = "1" ]; then WT="$MAIN"; else WT="$HOME/cmux/worktrees/$REPO/
 
 step(){ printf "\n\033[1m%s\033[0m\n" "$*"; }
 
+# --- 0. RAM ---
+# Mở thêm một feature = thêm ít nhất một session Claude. 17/08 máy đã bị jetsam (OOM) giết
+# tiến trình giữa chừng, không để lại crash report nào — nhìn từ cmux chỉ thấy "session tự chết".
+# Chặn ở đây rẻ hơn nhiều so với mất một session đang chạy dở.
+if [ -x "$MAIN/.claude/scripts/ram-guard.sh" ]; then
+  "$MAIN/.claude/scripts/ram-guard.sh" --strict || {
+    echo "   Dừng lại. Đóng bớt session hoặc tắt bớt tiến trình dev rồi mở lại." >&2
+    exit 1
+  }
+fi
+
 # --- 1. worktree ---
 step "[1/6] worktree"
 if [ "$MAIN_MODE" = "1" ]; then
@@ -81,7 +92,7 @@ else
   fi
 fi
 
-# --- 2. harness (bắt buộc — worktree trần không có skill pipeline, không có gate) ---
+# --- 2. harness (bắt buộc — worktree trần không có ship, không có gate) ---
 step "[2/6] trang bị harness"
 if [ "$MAIN_MODE" = "1" ]; then
   echo "  bỏ qua — checkout chính vốn đã là nguồn của harness"
@@ -188,13 +199,17 @@ Còn một việc phải làm bằng tay: điền phần nghiên cứu vào kick
   $KICK
 (session con không có ký ức gì về hội thoại này — thứ gì không viết ra là mất)
 
-Rồi khởi động scout (nhớ \\n ở cuối, cmux không tự bấm Enter):
-  cmux send --workspace $WS --surface $SCOUT_SURFACE \$'claude --dangerously-skip-permissions "\$(cat $KICK)"\n'
+Rồi khởi động scout:
+  .claude/scripts/cmux-say.sh launch $SLUG scout
+
+  (script tự bấm Enter, tự gạt prompt "New MCP server found" hay nuốt mất kickoff,
+   rồi đọc lại màn hình xác nhận Claude đã chạy thật)
 
   (đã kiểm chứng 2026-08-05: hook VẪN chặn trong bypass mode — session con bỏ hỏi
    permission nhưng 4 hàng rào readonly/translation/branch/lint vẫn ràng buộc nó)
 
 Tất cả tab:  cmux list-pane-surfaces --workspace $WS
+Trạng thái:  .claude/scripts/cmux-say.sh status $SLUG
 Theo dõi:    .claude/scripts/ship-board.sh
 ────────────────────────────────────────────────────────────
 EOF

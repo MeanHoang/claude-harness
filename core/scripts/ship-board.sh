@@ -8,14 +8,24 @@
 # Đọc khối `<!-- state ... -->` ở đầu progress.md (feature-team/templates/progress-header.md).
 # Task cũ chưa có khối đó vẫn hiện, cột state để "—".
 
+#
+# Cờ: --unstick  bấm Enter/Escape hộ những tab đang kẹt (mặc định chỉ BÁO, không đụng).
+
 set -uo pipefail
+UNSTICK=0; [ "${1:-}" = "--unstick" ] && UNSTICK=1
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "không ở trong git repo" >&2; exit 1; }
+
+# RAM trước tiên: session biến mất giữa chừng gần như luôn là OOM, không phải lỗi cmux.
+[ -x "$ROOT/.claude/scripts/ram-guard.sh" ] && "$ROOT/.claude/scripts/ram-guard.sh"
 
 python3 - "$ROOT" <<'PY'
 import glob, os, re, subprocess, sys
 
 root = sys.argv[1]
 rows = []
+# Tên repo hiện tại — worktree của mọi đầu việc nằm ở ~/cmux/worktrees/<repo>/<slug>,
+# nên suy từ đây thay vì hard-code, script chạy được ở bất kỳ project nào.
+_repo = os.path.basename(os.path.abspath(root))
 
 for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
     slug = os.path.basename(os.path.dirname(p))
@@ -49,15 +59,19 @@ for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
 
     # Tuổi + kích thước session con. Session sống quá lâu = context phình = chậm và đắt,
     # và nó vẫn chạy theo kickoff LÚC KHỞI ĐỘNG nên không thấy luật thêm sau đó.
-    age_h, sess_mb = None, 0
+    age_h, sess_mb, resume_id = None, 0, ""
     # Claude đặt tên thư mục project bằng đường dẫn tuyệt đối, thay "/" bằng "-".
-    # Suy từ tên repo hiện tại nên script chạy được ở bất kỳ project nào.
-    _repo = os.path.basename(os.path.abspath("."))
     _wt = os.path.expanduser("~/cmux/worktrees/%s/%s" % (_repo, slug))
     pdir = os.path.expanduser("~/.claude/projects/" + _wt.replace("/", "-"))
     if os.path.isdir(pdir):
         import glob as _g
-        for jf in _g.glob(pdir + "/*.jsonl"):
+        # id để `claude --resume` — transcript được ghi gần đây nhất.
+        # Tắt máy là mất tiến trình, cmux chỉ khôi phục giao diện; không có id này thì
+        # sáng hôm sau phải đi mò trong ~/.claude/projects.
+        js = _g.glob(pdir + "/*.jsonl")
+        if js:
+            resume_id = os.path.basename(max(js, key=os.path.getmtime))[:-6]
+        for jf in js:
             mb = os.path.getsize(jf) / 1024 / 1024
             if mb < 0.5:            # bỏ qua session con lặt vặt của skill
                 continue
@@ -82,7 +96,8 @@ for p in sorted(glob.glob(os.path.join(root, ".claude/ship/*/progress.md"))):
 
     rows.append(dict(slug=slug, branch=branch, gate=gate, awaiting=awaiting, kind=kind,
                      verdict=verdict, step=step, phase=phase, rnd=rnd, now=now,
-                     done=done, todo=todo, age_h=age_h, sess_mb=sess_mb))
+                     done=done, todo=todo, age_h=age_h, sess_mb=sess_mb,
+                     resume_id=resume_id))
 
 # ưu tiên: đang chờ user > đang chạy > xong
 def rank(r):
@@ -118,6 +133,15 @@ for r in rows:
         sess = f"{flag}{r['age_h']:.0f}h/{r['sess_mb']:.0f}MB"
     print(f"{mark}{r['slug'].ljust(w)}  {r['kind']:8} {r['gate']:9} {r['awaiting']:9} "
           f"{r['verdict']:13} {step:6} {sess:11} {r['now'][:52]}")
+
+# Hồi sinh sau khi tắt máy.
+# `cmux restore` chạy lại ARGV GỐC (claude "$(cat kickoff)") — tức là bắt đầu lại từ đầu,
+# mất sạch context. Chỉ `claude --resume <id>` mới giữ được. Hai lệnh không thay nhau được.
+res = [r for r in rows if r["resume_id"] and rank(r) < 2]
+if res:
+    print("\n── hồi sinh session (sau khi tắt máy / cmux restore) ──")
+    for r in res:
+        print(f"  cd ~/cmux/worktrees/{_repo}/{r['slug']} && claude --resume {r['resume_id']}")
 
 # xuất cho bước tô màu workspace (ghi ra file tạm, bash đọc lại)
 with open("/tmp/ship-board-colors.txt", "w", encoding="utf-8") as fh:
@@ -158,5 +182,30 @@ while IFS=$'\t' read -r slug rank rnd; do
   esac
   cmux workspace-action --action set-color --workspace "$ws" --color "$color" >/dev/null 2>&1 && painted=$((painted+1))
 done < /tmp/ship-board-colors.txt
-rm -f /tmp/ship-board-colors.txt
 [ "$painted" -gt 0 ] && echo "── đã tô màu $painted workspace theo trạng thái ──"
+
+# ── Tab nào đang KẸT ────────────────────────────────────────────────────────
+# Trạng thái không nhìn thấy được từ progress.md: message đã gõ vào ô nhập nhưng chưa
+# submit, hoặc một dialog đang nuốt phím. Hai bên cùng chờ nhau, không ai báo gì cả.
+SAY="$ROOT/.claude/scripts/cmux-say.sh"
+if [ -x "$SAY" ]; then
+  stuck_found=0
+  while IFS=$'\t' read -r slug _rank _rnd; do
+    out=$("$SAY" status "$slug" 2>/dev/null | grep -E "stuck|dialog") || continue
+    [ -n "$out" ] || continue
+    [ "$stuck_found" = 0 ] && echo && echo "── tab đang kẹt (chưa submit / dialog chặn) ──"
+    stuck_found=1
+    echo "  $slug:"; sed 's/^/    /' <<<"$out"
+  done < /tmp/ship-board-colors.txt
+
+  if [ "$stuck_found" = 1 ]; then
+    if [ "$UNSTICK" = 1 ]; then
+      echo "  → gỡ kẹt:"
+      while IFS=$'\t' read -r slug _r _n; do "$SAY" unstick "$slug" 2>/dev/null | sed 's/^/    /'; done \
+        < /tmp/ship-board-colors.txt
+    else
+      echo "  (chạy lại với --unstick để bấm Enter/Escape hộ)"
+    fi
+  fi
+fi
+rm -f /tmp/ship-board-colors.txt

@@ -52,10 +52,29 @@ done
 echo "[2] settings.local.json"
 link ".claude/settings.local.json"
 
-# --- 3. Skill untracked (ship, analyze-task, surface-audit, ...) ---
+# --- 3. Skill untracked (ship, analyze-task, ...) ---
 echo "[3] skill untracked"
 for d in "$MAIN"/.claude/skills/*/; do
   rel=".claude/skills/$(basename "$d")"
+  git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
+done
+
+# --- 3b. Script untracked (cmux-say.sh, ram-guard.sh, ship-board.sh, ...) ---
+# Role template gọi "$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh"; thiếu nó
+# thì mọi lần gọi role khác đều im lặng thất bại.
+echo "[3b] script untracked"
+for s in "$MAIN"/.claude/scripts/*; do
+  rel=".claude/scripts/$(basename "$s")"
+  git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
+done
+
+# --- 3c. Dữ liệu + command untracked (.claude/surfaces, .claude/commands) ---
+# surfaces/ là DỮ LIỆU skill đọc (bản đồ surface của surface-audit), không phải skill,
+# nên vòng [3] ở trên không bắt được.
+echo "[3c] surfaces + command untracked"
+link ".claude/surfaces"
+for c in "$MAIN"/.claude/commands/*.md; do
+  rel=".claude/commands/$(basename "$c")"
   git -C "$MAIN" ls-files --error-unmatch "$rel" >/dev/null 2>&1 || link "$rel"
 done
 
@@ -73,6 +92,34 @@ if grep -q "difflib" "$MAIN/.claude/hooks/auto-lint.sh" 2>/dev/null; then
 else
   echo "  ⚠ auto-lint.sh ở main KHÔNG phải bản range-limited — bỏ qua"
   skip=$((skip+1))
+fi
+
+# --- 5b. node_modules + .shopify: SYMLINK từ main ---
+# Thiếu chúng thì worktree không chạy được yarn / shopify app deploy, nên phải quay về
+# checkout chính — mà branch lại đang bị chính worktree này giữ, thành vòng luẩn quẩn:
+# muốn deploy tay thì phải XOÁ worktree. Symlink là cách cắt vòng đó.
+# Bắt buộc symlink chứ không copy: riêng node_modules gốc đã 3.5 GB.
+echo "[5b] node_modules + .shopify (symlink, cắt phụ thuộc vào checkout chính)"
+link_nm() {
+  local rel=$1 src="$MAIN/$1" dst="$WT/$1"
+  [ -d "$src" ] || return
+  [ -e "$dst" ] && [ ! -L "$dst" ] && return      # worktree tự cài rồi thì để yên
+  mkdir -p "$(dirname "$dst")"
+  ln -sfn "$src" "$dst"
+}
+nm=0
+for d in "$MAIN"/node_modules "$MAIN"/packages/*/node_modules "$MAIN"/extensions/*/node_modules; do
+  [ -d "$d" ] || continue
+  link_nm "${d#"$MAIN"/}" && nm=$((nm+1))
+done
+echo "  link  $nm × node_modules (root + packages + extensions)"
+ok=$((ok+nm))
+# .shopify giữ project.json (dev_store_url, client_id), cert localhost và cache deploy.
+# Không có nó thì `shopify app deploy` không biết deploy vào app nào.
+if [ -d "$MAIN/.shopify" ] && { [ ! -e "$WT/.shopify" ] || [ -L "$WT/.shopify" ]; }; then
+  ln -sfn "$MAIN/.shopify" "$WT/.shopify"
+  echo "  link  .shopify"
+  ok=$((ok+1))
 fi
 
 # --- 6. File env theo .worktreeinclude (git worktree add không tự copy — đó là tính năng
@@ -96,20 +143,14 @@ fi
 echo
 echo "[verify]"
 fail=0
-# Bắt buộc ở MỌI project: đây là hàng rào, thiếu là session con chạy không luật.
 must=(
+  ".claude/skills/ship/SKILL.md"
   ".claude/hooks/readonly-intent-guard.sh"
   ".claude/hooks/branch-guard.sh"
+  ".claude/hooks/ship-state-sync.sh"
+  ".claude/scripts/cmux-say.sh"
   ".claude/settings.local.json"
 )
-# Project nào cần thêm thì liệt kê trong .claude/harness-required.txt (mỗi dòng 1 đường dẫn).
-# Nhờ vậy skill riêng của từng repo không phải hardcode vào script dùng chung.
-if [ -f "$MAIN/.claude/harness-required.txt" ]; then
-  while IFS= read -r extra; do
-    case "$extra" in ''|\#*) continue ;; esac
-    must+=("$extra")
-  done < "$MAIN/.claude/harness-required.txt"
-fi
 for m in "${must[@]}"; do
   if [ -e "$WT/$m" ]; then echo "  ✓ $m"; else echo "  ✗ THIẾU $m"; fail=1; fi
 done
