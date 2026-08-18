@@ -175,6 +175,20 @@ turn; the state block is the one people forget. Fix the state block the moment y
 
 <h2>5. cmux traps, read before starting any role</h2>
 
+<div class="note">
+<b>You should not be hand-rolling <code>cmux send</code> at all any more.</b>
+<code>scripts/cmux-say.sh</code> exists precisely because every trap below used to be re-implemented,
+badly, in each of the six role templates:
+<pre><code>cmux-say.sh say     &lt;slug&gt; &lt;role&gt; &lt;message&gt;   send, then verify it was submitted
+cmux-say.sh launch  &lt;slug&gt; &lt;role&gt;             start a role that is not running yet
+cmux-say.sh status  &lt;slug&gt; [role]             what each tab is actually doing
+cmux-say.sh unstick &lt;slug&gt; [role]             press Enter for a tab that is stuck</code></pre>
+It resolves ids by name, refuses to send into a tab that is not running Claude (where your message
+would be executed as a shell command), and reads the screen back afterwards. If it cannot confirm
+delivery it exits 2 rather than reporting success. Read the traps anyway, so you know what the
+script is protecting you from.
+</div>
+
 <div class="danger">
 <b>Trap 1: <code>cmux send</code> types into the current command line and does not clear it.</b><br>
 Any tab holding unsubmitted text will mangle your command. Seen for real: a tab already held
@@ -206,7 +220,11 @@ Note the trailing <code>\n</code>: <code>cmux send</code> does not press Enter f
 </div>
 
 <h3>Confirming a session actually started</h3>
-<p>There is no command to read a pane's contents, so check the process table instead:</p>
+<p>Ask the script, which reads the pane back and classifies what it sees:</p>
+<pre><code>cmux-say.sh status &lt;slug&gt;</code></pre>
+<p>A tab reporting <code>shell</code> is not running Claude; one reporting <code>stuck</code> is
+holding an unsubmitted message, which is the failure that makes two sessions wait on each other
+forever. If <code>cmux read-screen</code> is unavailable, fall back to the process table:</p>
 <pre><code>for p in $(pgrep -f "bin/claude"); do
   lsof -a -p "$p" -d cwd -Fn 2&gt;/dev/null | sed -n 's/^n//p'
 done | grep &lt;slug&gt;</code></pre>
@@ -252,7 +270,51 @@ waited on each other indefinitely until the user carried the message himself.</p
 "the value already exists but is never passed up, so it lands in the wrong fallback branch", and the
 report went in circles before proposing a brand-new field.</p>
 
-<h2>8. For bugs, use <code>bug-check</code> rather than opening a feature</h2>
+<h2>8. Surviving a shutdown, a compact, and the OOM killer</h2>
+
+<p>Three ways a long-running session quietly loses itself, and what the harness does about each.</p>
+
+<table>
+  <tr><th>What happens</th><th>Why it costs you</th><th>What handles it</th></tr>
+  <tr>
+    <td>You shut the machine down</td>
+    <td><code>cmux restore</code> re-runs the ORIGINAL argv, so the session starts again from
+        nothing. Only <code>claude --resume &lt;id&gt;</code> keeps the conversation, and that id
+        was previously something you had to hunt for under <code>~/.claude/projects</code>.</td>
+    <td><code>ship-state-sync</code> writes the id into the state block; <code>ship-board.sh</code>
+        prints the exact resume command per feature.</td>
+  </tr>
+  <tr>
+    <td>The context compacts</td>
+    <td>The summary is written by the model in its own words, and every summary drops detail. An
+        unattended session can compact at 3am and carry on from its own abridgement. The kickoff
+        file is read once at launch, so it cannot rescue this.</td>
+    <td><code>ship-context-restore</code> injects the ADDRESS of the truth (progress.md,
+        decisions.md, the NOW line) rather than trying to re-inject the content.</td>
+  </tr>
+  <tr>
+    <td>The machine runs out of memory</td>
+    <td>macOS jetsam kills a session mid-run and leaves no crash report, so it reads as "cmux is
+        flaky" rather than "you opened one session too many".</td>
+    <td><code>ram-guard.sh</code>, which <code>feature-open.sh</code> calls before opening anything.</td>
+  </tr>
+</table>
+
+<div class="note">
+<b>ram-guard invents no threshold.</b> It reads the compressor size recorded in this machine's most
+recent <code>JetsamEvent</code> report and compares the current compressor against it. If the machine
+has never actually run out of memory there is nothing to compare against, so it stays quiet rather
+than making a percentage up.
+</div>
+
+<div class="warn">
+<b>What must NOT go into progress.md: a work log.</b> That file is the to-do list a human and an
+agent read to know what is next. Pouring log lines into it inflates exactly the file that was just
+pruned. Reasons and decisions belong in <code>decisions.md</code>, which is append-only, and writing
+them is the model's job, not a hook's. The hooks touch only the metadata inside the comment block.
+</div>
+
+<h2>9. For bugs, use <code>bug-check</code> rather than opening a feature</h2>
 
 <p>The output of <code>bug-check</code> is a <b>diagnosis</b>, not code. No branch, no worktree, no
 plan. One session, three legs, a report, then stop.</p>
@@ -271,7 +333,7 @@ reads B, and that is the break.</b></p>
 <code>need-logging</code>. When you are not sure, <code>need-data</code> and
 <code>need-logging</code> are legitimate answers, not failures.</p>
 
-<h2>9. Describing a bug to someone who has never touched the flow</h2>
+<h2>10. Describing a bug to someone who has never touched the flow</h2>
 
 <p>This block is mandatory at the top of every bug-fix plan. Exactly five lines, one sentence each,
 each carrying a real number:</p>
