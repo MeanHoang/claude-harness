@@ -13,6 +13,13 @@ Dev switches branches constantly; finding the right `docs/**.md` by hand each ti
 
 ---
 
+## Arguments
+
+Normally none — it reads the branch you are standing on.
+`--note "<free text>"` — optional steer, e.g. `--note "chỉ quan tâm phần storefront"`.
+
+A note here changes **what the card emphasises**, not what it is allowed to do: this skill stays read-only, still prints one card, still makes no edits. If the note asks for something outside that (fix it, continue the merge), say so and stop — that belongs to another skill.
+
 ## Run this — gather everything in one batch
 
 These are independent; run them together.
@@ -46,7 +53,7 @@ Derive keywords from the branch name (drop the `feat/`,`feature/`,`fix/`,`merge/
 BR=$(git rev-parse --abbrev-ref HEAD)
 KW=$(echo "$BR" | sed -E 's#^[^/]+/##; s/-v?[0-9]+$//' | tr '-' '|')   # e.g. milestone-recurring-mode → milestone|recurring|mode
 find docs -iname '*.md' 2>/dev/null | grep -iE "$KW" | head
-# Doc homes: docs/features/, docs/plans/, docs/design/features/, docs/hotfix/, docs/superpowers/specs/
+# Doc homes (adjust to your repo): docs/features/, docs/plans/, docs/design/features/, docs/hotfix/, docs/superpowers/specs/
 ```
 
 - **Exactly one match** → that's the doc. Read it.

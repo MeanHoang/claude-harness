@@ -6,7 +6,8 @@ description: Print the table of every running work item — whatever is waiting 
 # The running-work board
 
 ```bash
-.claude/scripts/ship-board.sh
+.claude/scripts/ship-board.sh              # chỉ báo cáo
+.claude/scripts/ship-board.sh --unstick    # + bấm Enter/Escape hộ tab đang kẹt
 ```
 
 Run it, then **read the result back to the user** — do not just paste the raw table. Cover it in
@@ -31,6 +32,24 @@ since are invisible to it. Measured 07/08: four sessions at 40–45 hours had ma
 implementer dispatches despite the rule existing and the tool being available.
 
 Seeing ⚠ means tell the user that item needs its session restarted, not just that it is old.
+
+## Three sections that are not in the table
+
+**RAM, printed first.** A session that vanished mid-run is almost always the OOM killer, not a
+cmux bug — it leaves no crash report, so the only trace is `JetsamEvent-*.ips`. The warning
+compares current memory against the level measured at the last real OOM on this machine; no
+invented percentage. If it fires, say so before discussing anything else: opening another tab
+will cost the user a running session.
+
+**"hồi sinh session".** One `claude --resume <id>` line per live work item. cmux restores the
+layout but not the processes, so after a reboot every tab is a bare shell — and `cmux restore`
+would re-run the kickoff from scratch, losing the context. Only `--resume` keeps it. When the
+user opens a session after restarting the machine, these lines are the answer to "where was I".
+
+**"tab đang kẹt".** Read from the screen, not from any file: a message typed into a role's input
+box but never submitted, or a dialog swallowing keystrokes. Both sides then wait forever and
+neither writes anything to `progress.md`, so this is invisible to every other column. Report it,
+and mention `--unstick` — do not run that yourself unless the user asked.
 
 ## Workspace colours
 

@@ -41,8 +41,8 @@ So before starting scout, do the research **in the current session** and fill it
 Then start scout:
 
 ```bash
-cmux list-pane-surfaces --workspace <ws>          # get the scout tab id
-cmux send --workspace <ws> --surface <id> $'claude --dangerously-skip-permissions "$(cat <kickoff>)"\n'
+.claude/scripts/cmux-say.sh launch <slug> scout
+.claude/scripts/cmux-say.sh status <slug>          # confirm: scout should read "running"
 ```
 
 **Why child sessions run `--dangerously-skip-permissions`:** they run unattended, and any command
@@ -56,11 +56,14 @@ deny the Write, and no file was created. The flag drops the **permission prompt*
 `bootstrap-worktree.sh` is mandatory: a worktree missing hooks *plus* bypass mode is a genuinely
 unconstrained agent.
 
-`cmux send` **does not press Enter for you** — without the trailing `\n` the command just sits in
-the terminal, typed but unsubmitted.
+**Why go through `cmux-say.sh` rather than `cmux send` directly.** Raw `cmux send` does not press
+Enter (the trailing `\n` supplies it), does not dismiss the "New MCP server found" prompt that a
+fresh worktree hits on its first run and that swallows the kickoff, and — worst — reports success
+either way. The script does all three and reads the screen back before returning, so a tab that
+never started is loud instead of silently idle.
 
-The first session in a fresh worktree may hit an interactive "New MCP server found" prompt that
-swallows the kickoff. If so: `cmux send-key --workspace <ws> --surface <id> escape`.
+It also refuses to send a message into a tab that is still a bare shell. Sent raw, the message
+would be executed as a shell command.
 
 ## What you end up with
 
@@ -72,6 +75,66 @@ swallows the kickoff. If so: `cmux send-key --workspace <ws> --surface <id> esca
 | Tabs `coder` / `research` / `reviewer` / `ux` / `checker` | Ready but idle — started when their turn comes, kickoffs in `.claude/ship/<slug>/kickoff-*.md` |
 
 The phase lifecycle, the four loop rules, and the three user gates live in the `feature-team` skill.
+
+## Deploying or running tooling from inside a worktree
+
+A worktree can now run `yarn`, `eslint`, `shopify app deploy` on its own — bootstrap symlinks
+`node_modules` (root + every package + every extension, 19 of them) and `.shopify` back to the
+main checkout. Without those, every command failed and the only way out was to go back to the
+main checkout — but the branch was held by the worktree, so you had to **delete the worktree just
+to deploy by hand**. That loop is what the symlinks cut.
+
+So: **deploy from inside the worktree, do not check the branch out in main.**
+
+```bash
+cd ~/cmux/worktrees/<repo>/<slug>
+yarn deploy-extensions          # or shopify app deploy --config <cfg>
+```
+
+Two things to know about the symlinks:
+
+- **`.shopify` is shared with the main checkout.** It holds `project.json`, the localhost cert and
+  the deploy/dev bundle cache. Two worktrees running `shopify app dev` at once will fight over it —
+  run the dev stack in one place at a time.
+- **`node_modules` is shared too.** If your branch changes `package.json`, the shared tree is wrong
+  for it: run `yarn install` inside the worktree, which replaces the symlink with a real directory.
+  Bootstrap leaves any real directory alone on later runs.
+
+## Getting a SECOND checkout of a branch a worktree already holds
+
+You want the branch's code in the main checkout too — to run the full dev stack, or to deploy by
+hand — while the worktree keeps working on it. Git refuses the obvious form:
+
+```bash
+git checkout <branch>                    # fatal: already checked out at <worktree>
+git worktree add <path> <branch>         # same refusal
+```
+
+Git only forbids two places **holding** the same branch (so two HEADs can never move it at once).
+It does not forbid two places **sitting on** the same commit. So detach:
+
+```bash
+git checkout --detach <branch>           # main now has that exact code, holds no branch
+yarn dev / yarn deploy-extensions        # run whatever you needed
+git checkout <your-previous-branch>      # go back when done
+```
+
+Verified 2026-08-08: `git worktree add --detach <path> <branch>` succeeds against a branch already
+held elsewhere; both land on the same commit and the worktree keeps its branch untouched.
+
+**The one caveat: you are on a detached HEAD.** Commits made there belong to no branch and are
+easy to lose. Read, run, deploy — do not commit. If you did commit by accident, `git branch
+<name> <sha>` before switching away rescues it.
+
+**Never delete the worktree just to free the branch.** That throws away its harness symlinks, its
+`progress.md` state and its cmux tabs, for something `--detach` solves in one command.
+
+The reverse direction, when you want the branch itself in main rather than just its code:
+
+```bash
+git -C ~/cmux/worktrees/<repo>/<slug> checkout --detach   # releases the branch, keeps the worktree
+git checkout <branch>                                   # now main can take it
+```
 
 ## Known limits
 
