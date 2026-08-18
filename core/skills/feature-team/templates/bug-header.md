@@ -9,6 +9,7 @@ awaiting: check
 round: 0
 gate: none
 verdict: -
+note: {{--note của anh, nguyên văn | none}}
 -->
 
 # Bug: {{title}}

@@ -31,8 +31,8 @@ line, and only then investigate from zero.
 ## What you produce — a proposal complete enough for the coder to build from
 
 1. **Layout**: what sits where, the top-to-bottom reading order, what is prominent and what recedes.
-2. **Concrete components**: name the project's actual components, no vague descriptions. Admin means
-   Polaris plus the repo's shared components; widget V4 means Lit web components.
+2. **Concrete components**: name the components that actually exist, no vague descriptions — the
+   admin UI kit plus the repo's shared components; the storefront widget's own component set.
 3. **Display copy**: write out **verbatim** every sentence the user will read — labels, buttons,
    success messages, error messages, empty states.
 4. **States**: normal · loading · empty · error · unusually long values.
@@ -90,7 +90,7 @@ explain why this screen differs from every other one enough to justify going its
 .claude/scripts/shot.sh <image.png> 1000    # prints a compressed .jpg — Read that file
 ```
 
-Images enter the context as base64. Measured 06/08 across all sessions: **44% of every tool
+Images enter the context as base64. Measured 06/08 across a full session history: **44% of every tool
 result was an image — roughly 6.15 million tokens**. One full-page PNG at 600 KB ≈ 150k tokens,
 and it stays in context for every subsequent turn.
 
@@ -105,15 +105,24 @@ that you are **finished for this phase** — no need to wait around and re-check
 
 ## Calling another role — YOU MUST ACTUALLY CALL
 
-Look the address up by NAME; never hardcode ids — cmux renumbers them whenever a workspace is
-closed and reopened, and a stale id will hit a different feature entirely.
+`cmux-say.sh` resolves the address by NAME and — the part that matters — **verifies the
+message actually landed**. It exits non-zero if the text is still sitting unsubmitted, so a
+failed handoff is loud instead of silent. Never hand-roll `cmux send`:
+
+- ids get renumbered whenever a workspace is closed and reopened, so a hardcoded one hits a
+  different feature entirely;
+- the surface line of the **currently selected** tab is prefixed with `*`, which shifts the
+  columns — the hand-rolled lookup silently missed that tab and fell back to sending the
+  message to *itself*;
+- a tab that is still a bare shell would run your message as a shell command. The script
+  refuses instead.
+
+If it exits non-zero, the other role did **not** get your message. Do not carry on as if it did.
 
 ```bash
-WS=$(cmux workspace list | awk '$2=="{{slug}}"{print $1}')
+SAY="$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh"
 call() {   # call <role> <message>
-  local sid
-  sid=$(cmux list-pane-surfaces --workspace "$WS" | awk -v n="$1" '$2==n{print $1; exit}' | tr -d '*')
-  cmux send --workspace "$WS" --surface "$sid" "$2"$'\n'
+  "$SAY" say {{slug}} "$1" "$2"
 }
 
 call coder "P3 design ready: mockup at /tmp/p3-w1000.jpg, layout copied from VipTierCard.js:44"
@@ -127,6 +136,5 @@ request, and only then say you handed it over.
 A role that has never run (its tab is still a bare shell) — start it first:
 
 ```bash
-sid=$(cmux list-pane-surfaces --workspace "$WS" | awk '$2=="<role>"{print $1; exit}' | tr -d '*')
-cmux send --workspace "$WS" --surface "$sid" $'claude --dangerously-skip-permissions "$(cat .claude/ship/{{slug}}/kickoff-<role>.md)"\n'
+"$SAY" launch {{slug}} <role>
 ```

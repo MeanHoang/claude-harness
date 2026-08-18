@@ -33,9 +33,9 @@ line, and only then investigate from zero.
 
 - **Code behaviour**: what does this function return on branch X? who writes this field, who reads
   it? where does this flow go? how many call sites?
-- **Product domain knowledge**: how earn/spend programs work, how tiers are computed, how refunds
-  return points, which surfaces are still alive. Use the existing skills (`surface-audit`,
-  `loyalty-program-development`, `layer-architecture`, `firestore`).
+- **Product domain knowledge**: how the core flows actually work, what is derived from what, which
+  surfaces are still alive. Use your impact/coverage command for the surface list, plus whichever
+  domain skills this repo has.
 - **External APIs**: what Shopify GraphQL/REST can do and where the limits are. Use the Shopify Dev
   MCP (`learn_shopify_api` → `search_docs_chunks`); never write GraphQL from memory.
 - **Does it already exist**: is there already a helper/component/field doing this, or must one be
@@ -79,15 +79,24 @@ volunteer code changes.
 
 ## Calling another role — YOU MUST ACTUALLY CALL
 
-Look the address up by NAME; never hardcode ids — cmux renumbers them whenever a workspace is
-closed and reopened, and a stale id will hit a different feature entirely.
+`cmux-say.sh` resolves the address by NAME and — the part that matters — **verifies the
+message actually landed**. It exits non-zero if the text is still sitting unsubmitted, so a
+failed handoff is loud instead of silent. Never hand-roll `cmux send`:
+
+- ids get renumbered whenever a workspace is closed and reopened, so a hardcoded one hits a
+  different feature entirely;
+- the surface line of the **currently selected** tab is prefixed with `*`, which shifts the
+  columns — the hand-rolled lookup silently missed that tab and fell back to sending the
+  message to *itself*;
+- a tab that is still a bare shell would run your message as a shell command. The script
+  refuses instead.
+
+If it exits non-zero, the other role did **not** get your message. Do not carry on as if it did.
 
 ```bash
-WS=$(cmux workspace list | awk '$2=="{{slug}}"{print $1}')
+SAY="$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh"
 call() {   # call <role> <message>
-  local sid
-  sid=$(cmux list-pane-surfaces --workspace "$WS" | awk -v n="$1" '$2==n{print $1; exit}' | tr -d '*')
-  cmux send --workspace "$WS" --surface "$sid" "$2"$'\n'
+  "$SAY" say {{slug}} "$1" "$2"
 }
 
 call coder "verified: calcPoint returns 0, never negative — calculatePointPlaceOrder.js:212"

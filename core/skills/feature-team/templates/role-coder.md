@@ -68,13 +68,13 @@ resembles one that already exists, stop and extract it. Place it correctly per
 only exception: two blocks that *look* alike but are genuinely different business rules — and
 then you must say why you did not merge them. Never leave duplication silently.
 
-**2. Follow the patterns this project already uses; do not invent.** This is the PATTERN REFERENCE gate
+**2. Follow the patterns this repo already uses; do not invent.** This is the PATTERN REFERENCE gate
 above, but it applies beyond new files: how arguments are passed, how errors are returned, where
 files live, how repositories are called — all of it must match siblings in the same layer.
 Deviate only if you can justify it.
 
 **3. Write comments in VIETNAMESE.** All explanatory comments in code are Vietnamese. Function
-names, variable names and commit messages stay English. English comments in a the project file read as
+names, variable names and commit messages stay English. English comments in this repo read as
 foreign and force the next reader to translate back.
 
 **4. A function name must answer TWO questions:**
@@ -131,7 +131,7 @@ phase and having the reviewer reject it.
 .claude/scripts/shot.sh <image.png> 1000    # prints a compressed .jpg — Read that file
 ```
 
-Images enter the context as base64. Measured 06/08 across all sessions: **44% of every tool
+Images enter the context as base64. Measured 06/08 across a full session history: **44% of every tool
 result was an image — roughly 6.15 million tokens**. One full-page PNG at 600 KB ≈ 150k tokens,
 and it stays in context for every subsequent turn.
 
@@ -151,19 +151,28 @@ Report: which files you changed, where each pattern was copied from, the eslint 
 
 ## Calling another role — YOU MUST ACTUALLY CALL
 
-Look the address up by NAME; never hardcode ids — cmux renumbers them whenever a workspace is
-closed and reopened, and a stale id will hit a different feature entirely.
+`cmux-say.sh` resolves the address by NAME and — the part that matters — **verifies the
+message actually landed**. It exits non-zero if the text is still sitting unsubmitted, so a
+failed handoff is loud instead of silent. Never hand-roll `cmux send`:
+
+- ids get renumbered whenever a workspace is closed and reopened, so a hardcoded one hits a
+  different feature entirely;
+- the surface line of the **currently selected** tab is prefixed with `*`, which shifts the
+  columns — the hand-rolled lookup silently missed that tab and fell back to sending the
+  message to *itself*;
+- a tab that is still a bare shell would run your message as a shell command. The script
+  refuses instead.
+
+If it exits non-zero, the other role did **not** get your message. Do not carry on as if it did.
 
 ```bash
-WS=$(cmux workspace list | awk '$2=="{{slug}}"{print $1}')
+SAY="$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh"
 call() {   # call <role> <message>
-  local sid
-  sid=$(cmux list-pane-surfaces --workspace "$WS" | awk -v n="$1" '$2==n{print $1; exit}' | tr -d '*')
-  cmux send --workspace "$WS" --surface "$sid" "$2"$'\n'
+  "$SAY" say {{slug}} "$1" "$2"
 }
 
 call research "does calculatePointPlaceOrder return negative or 0 when subtotal drops? need it to pick a branch"
-call reviewer "P3 done: 4 files changed, pattern from pricingService.js:88"
+call reviewer "P3 done: 4 files changed, pattern from tierService.js:88"
 ```
 
 **Writing "handing this to X" in your own report makes nobody run.** On 05/08 the reviewer wrote
@@ -174,8 +183,7 @@ request, and only then say you handed it over.
 A role that has never run (its tab is still a bare shell) — start it first:
 
 ```bash
-sid=$(cmux list-pane-surfaces --workspace "$WS" | awk '$2=="<role>"{print $1; exit}' | tr -d '*')
-cmux send --workspace "$WS" --surface "$sid" $'claude --dangerously-skip-permissions "$(cat .claude/ship/{{slug}}/kickoff-<role>.md)"\n'
+"$SAY" launch {{slug}} <role>
 ```
 
 ## Dispatch implementers by surface — do not code it all yourself

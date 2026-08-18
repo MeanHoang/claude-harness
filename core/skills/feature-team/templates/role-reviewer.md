@@ -63,8 +63,8 @@ must-fix because they make the code hard to read and maintain:
 | Look for | What broken looks like |
 |---|---|
 | **Duplication with no helper** | Two closely similar blocks, no shared helper, and no stated reason |
-| **Not following the project's patterns** | Argument passing / error handling / file placement diverges from siblings in the same layer with no justification |
-| **English comments** | Comments in this project's code must be **Vietnamese** (names and commit messages stay English) |
+| **Not following this repo's patterns** | Argument passing / error handling / file placement diverges from siblings in the same layer with no justification |
+| **English comments** | Comments in this repo must be **Vietnamese** (names and commit messages stay English) |
 | **Vague function names** | You cannot tell from the name what it *does* and what it *returns* — `retain`, `handle`, `process`. Must follow the app's system: `get…Data` / `is…Eligible` / `calculate…` / `prepare…` |
 
 These four **may be flagged must-fix** even though they cause no runtime failure — they are the
@@ -75,13 +75,13 @@ stated exception to the "only flag correctness" rule.
 Run them in order, merge the findings, drop duplicates:
 
 1. `/code-review` — the plugin, general defect scan
-2. `/review` — the project's own house standard (layers, naming, Polaris, i18n)
+2. `/review` — the standard this project wrote for itself (layers, naming, UI kit, i18n)
 
 For depth, dispatch agents **in parallel** — three genuinely different lenses:
 
 | Lens | Agent |
 |---|---|
-| Overall, house standards | `code-reviewer` (opus) |
+| Overall, project standards | `code-reviewer` (opus) |
 | Security, IDOR, HMAC, PII leaks | `security-auditor` |
 | Firestore reads, sequential async, cost | `performance-reviewer` |
 
@@ -92,15 +92,24 @@ yourself — that is the coder's job. You may not touch product files.
 
 ## Calling another role — YOU MUST ACTUALLY CALL
 
-Look the address up by NAME; never hardcode ids — cmux renumbers them whenever a workspace is
-closed and reopened, and a stale id will hit a different feature entirely.
+`cmux-say.sh` resolves the address by NAME and — the part that matters — **verifies the
+message actually landed**. It exits non-zero if the text is still sitting unsubmitted, so a
+failed handoff is loud instead of silent. Never hand-roll `cmux send`:
+
+- ids get renumbered whenever a workspace is closed and reopened, so a hardcoded one hits a
+  different feature entirely;
+- the surface line of the **currently selected** tab is prefixed with `*`, which shifts the
+  columns — the hand-rolled lookup silently missed that tab and fell back to sending the
+  message to *itself*;
+- a tab that is still a bare shell would run your message as a shell command. The script
+  refuses instead.
+
+If it exits non-zero, the other role did **not** get your message. Do not carry on as if it did.
 
 ```bash
-WS=$(cmux workspace list | awk '$2=="{{slug}}"{print $1}')
+SAY="$(git rev-parse --show-toplevel)/.claude/scripts/cmux-say.sh"
 call() {   # call <role> <message>
-  local sid
-  sid=$(cmux list-pane-surfaces --workspace "$WS" | awk -v n="$1" '$2==n{print $1; exit}' | tr -d '*')
-  cmux send --workspace "$WS" --surface "$sid" "$2"$'\n'
+  "$SAY" say {{slug}} "$1" "$2"
 }
 
 call coder   "must-fix: file.js:120 missing shopId guard — a shop can read another shop's rows"
@@ -115,6 +124,5 @@ request, and only then say you handed it over.
 A role that has never run (its tab is still a bare shell) — start it first:
 
 ```bash
-sid=$(cmux list-pane-surfaces --workspace "$WS" | awk '$2=="<role>"{print $1; exit}' | tr -d '*')
-cmux send --workspace "$WS" --surface "$sid" $'claude --dangerously-skip-permissions "$(cat .claude/ship/{{slug}}/kickoff-<role>.md)"\n'
+"$SAY" launch {{slug}} <role>
 ```
