@@ -80,7 +80,7 @@ Then `Read` just those line ranges (or the whole file if it's short, < ~150 line
 ## Distinguish branch type
 
 - **Feature branch** (`feat/…`, `feature/…`, `fix/…`) → one task. Use its doc as above.
-- **Integration / merge branch** (`merge/…`, names like `merge/hoang-t6-v2`) → collects **many** tasks for QA. There's no single doc. Instead enumerate what's been merged in:
+- **Integration / merge branch** (`merge/…`, `integration/…`, `qa/…`) → collects **many** tasks for QA. There's no single doc. Instead enumerate what's been merged in:
   ```bash
   # --first-parent = only the direct merges INTO this branch (skips nested master→feat merges)
   git log --oneline --merges --first-parent master..HEAD | head -20   # each = one task branch folded in

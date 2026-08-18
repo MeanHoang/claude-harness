@@ -15,12 +15,12 @@ reviewer already agree with each other.
 
 1. **Lint** exactly the files that changed (not the whole repo).
 2. **Tests** for the affected package, if any exist.
-3. **UI must be seen**: open the actual surface, screenshot it, read the console errors. See the
-   `test-environments` skill for which store, the storefront password, how to log in as a
-   customer. Layout/CSS work → screenshot at **several widths**; the admin preview is narrower
-   than the real storefront.
-4. **Backend must have logs**: after exercising it, grep `firebase-debug.log` (local) or the GCP
-   logs for that environment for new errors. Looking at the UI alone is not a test.
+3. **UI must be seen**: open the actual surface, screenshot it, read the console errors. Get the
+   environment, the login and any gate password from wherever your project records them.
+   Layout/CSS work → screenshot at **several widths**; an embedded preview is narrower than the
+   real thing.
+4. **Backend must have logs**: after exercising it, grep the local log file or that environment's
+   log console for new errors. Looking at the UI alone is not a test.
 5. **Re-check the UI against the UX proposal** — dispatch `ui-ux-reviewer` for this. The UX
    session designed it; you confirm the built result matches.
 
@@ -52,7 +52,7 @@ and it stays in context for every subsequent turn.
 
 ## If you cannot run something, say so plainly
 
-Some things need the user once (2FA login to admin, `sudo yarn dev`). When you hit one, **do not
+Some things need the user once (a 2FA login, a password prompt). When you hit one, **do not
 hang** — run everything that does not depend on it, then report precisely *"this specific part is
 still missing, it needs you once"*. Reporting a gap beats reporting a false pass.
 

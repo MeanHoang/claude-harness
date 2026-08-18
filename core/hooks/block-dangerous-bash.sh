@@ -24,6 +24,6 @@ fi
 # 3. sudo DIRECTLY invoking the dev server -> creates root-owned CLI files, the EACCES cycle.
 # (Adjacency required so doc/commit/PR text mentioning "sudo ... yarn dev" is not flagged.)
 if printf '%s' "$cmd" | grep -qE '(^|[[:space:]])sudo[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+|-[A-Za-z]+[[:space:]]+)*(yarn[[:space:]]+(run[[:space:]]+)?dev|npm[[:space:]]+run[[:space:]]+dev|shopify[[:space:]]+app[[:space:]]+dev)'; then
-  deny "Never sudo the dev server — it leaves root-owned CLI files that force more sudo (the EACCES cycle). Run yarn dev / yarn dev:all without sudo; on EACCES, chown the root-owned files once (see CLAUDE.md / memory)."
+  deny "Never sudo the dev server — it leaves root-owned CLI files that force more sudo (the EACCES cycle). Run the dev server without sudo; on EACCES, chown the root-owned files once (see CLAUDE.md / memory)."
 fi
 exit 0

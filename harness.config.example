@@ -1,9 +1,9 @@
 # harness.config — fill these in after pasting the harness into a project.
 #
-# Some skills reference things only your project knows: where its packages live, which
-# cloud projects it deploys to, which stores you test against. Those were stripped before
-# publishing and replaced by {{VARS}}. Copy this file to `harness.config`, fill in what
-# applies, then run:
+# A few skills reference things only your project knows: where its packages live, which
+# cloud project it deploys to, which chat channel your team talks in. Those were stripped
+# before publishing and replaced by {{VARS}}. Copy this file to `harness.config`, fill in
+# what applies, then run:
 #
 #   ./fill-vars.sh /path/to/project harness.config
 #
@@ -15,37 +15,24 @@
 # ── Where things live ──────────────────────────────────────────────────────────
 PROJECT_ROOT=/Users/you/Projects/my-app
 
-# Monorepo package paths, used by the review/merge skills. Single-package repo? Drop them.
-PKG_BACKEND=packages/server              # server code
+# Monorepo package path used by the merge skill (locale output vs locale input).
+# Single-package repo? Drop it.
 PKG_ADMIN=packages/admin                 # admin/dashboard frontend
 
 # ── Git ────────────────────────────────────────────────────────────────────────
 GIT_REMOTE_HOST=git.example.com/org/repo
 
 # ── Cloud projects ─────────────────────────────────────────────────────────────
-FIREBASE_STAGING=my-app-staging          # staging; skills append -N for numbered stagings
-
-# ── Test stores / tenants ──────────────────────────────────────────────────────
-DEV_STORE=my-dev-store.example.com
-DEV_STORE_ALT=my-second-dev-store.example.com
-STAGING_STORE=my-staging-store.example.com
-STAGING_STORE_ALT=my-other-staging-store.example.com
-
-APP_HANDLE=my-app                        # app handle in the platform admin URL
-STAGING_HANDLE=my-app-staging
-
-# Password on the storefront password page of every dev/staging store.
-STOREFRONT_PASSWORD=1
+# Used only to describe how a deployed bundle is polled to detect which branch a
+# staging environment is actually running. Skills append -N for numbered stagings.
+FIREBASE_STAGING=my-app-staging
 
 # ── Team channels ──────────────────────────────────────────────────────────────
 DEV_CHANNEL=dev                          # chat channel the catch-up skill reads
 
-# ── Test identities ────────────────────────────────────────────────────────────
-WORK_EMAIL=you@example.com
-
-# The mail-reading step also needs two real environment variables at run time.
-# Keep them in your shell or .env, NEVER here:
-#   TEST_MAIL_USER
-#   TEST_MAIL_APP_PASSWORD
-#
-# ⚠️ That app password can read a real mailbox. Scope it to one-time-code lookups only.
+# ── Deliberately absent ────────────────────────────────────────────────────────
+# No store domains, no test logins, no mailbox credentials. The skill that needed
+# them (which tenant belongs to which app, how to read a real inbox for a one-time
+# code) is not published here at all: that is a description of one company's estate,
+# and variable-substitution does not make it safe to ship. Keep yours in a private
+# repo alongside the rest of your product-specific skills.

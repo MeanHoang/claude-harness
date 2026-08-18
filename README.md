@@ -24,7 +24,7 @@ they carry per-project permissions and hook wiring; wire the hooks by hand after
 
 ## What you get
 
-16 skills, 9 hooks, 7 scripts. A development workflow, not a dev-stack setup: nothing here
+15 skills, 9 hooks, 7 scripts. A development workflow, not a dev-stack setup: nothing here
 knows how your app boots, and nothing is tied to a particular product.
 
 **Running work in parallel**
@@ -43,9 +43,8 @@ audit, with the per-hunk technique that avoids the `--theirs` data-loss trap)
 `bug-check` (diagnose and STOP: three legs, one of four verdicts, never fix)
 
 **Testing**
-`test-environments` (which store belongs to which app, how to set up data, how to log in as a
-customer) · `surface-audit` (a coverage-audit method so a feature does not ship to four surfaces
-when it has five)
+`surface-audit` (a coverage-audit method so a feature does not ship to four surfaces when it has
+five)
 
 **Deciding what to build, and how to run it**
 `feature-review` (roast a feature BEFORE it is built: premise → output vs outcome → Build / Reframe /
@@ -70,8 +69,9 @@ OOM as the threshold) · `shot.sh` (screenshots that do not flood the context) �
 
 ## Fill in your own values
 
-Project-specific values were stripped before publishing and replaced with `{{VARS}}`: store
-package paths, cloud project ids, git remote, store domains, test identities. 14 in all.
+Project-specific values were stripped before publishing and replaced with `{{VARS}}`: a package
+path, a cloud project id, a git remote, a chat channel, the repo root. Five in all — deleting the
+test-environments skill took every store domain and test identity with it.
 
 ```bash
 cp harness.config.example harness.config     # fill it in; it is gitignored
@@ -81,13 +81,15 @@ cp harness.config.example harness.config     # fill it in; it is gitignored
 `fill-vars.sh` is idempotent, and any `{{VAR}}` with no matching key is left alone and reported —
 nothing is silently replaced with an empty string.
 
-Two skills ship deliberately hollow:
+One skill ships deliberately hollow:
 
 - **`surface-audit`** keeps the audit *method* but the surface inventory is an empty template. That
   map is a description of a specific product; it is knowledge, not tooling.
-- **`test-environments`** keeps the procedure, with credentials as variables. The mail-reading step
-  still needs `TEST_MAIL_USER` / `TEST_MAIL_APP_PASSWORD` as real environment variables at run time.
-  That app password can read a real mailbox — scope it to one-time-code lookups only.
+
+There is deliberately **no test-environments skill here**. Which store belongs to which app, which
+credentials reach which tenant, and how to read a real mailbox for a login code are all facts about
+one company's estate. That is exactly the kind of thing you do not publish, and no amount of
+variable-substitution makes it safe to.
 
 ## Why it exists
 

@@ -1,17 +1,17 @@
 ---
 name: surface-audit
-description: "Bản đồ MỌI surface khách/merchant của sản phẩm + quy trình audit coverage. Dùng BẮT BUỘC khi: lên plan feature (/plan, /ship Gate 2), user nói 'cập nhật ở mọi surface', 'check surface', 'sót surface nào không', review/impact một feature storefront, hoặc sau khi code xong một feature đụng UI khách hàng. Walk từng dòng checklist, đánh dấu touched / not-affected / MISSED — không được kết luận 'đủ surface' nếu chưa đi hết bảng."
+description: "Bản đồ MỌI surface người dùng nhìn thấy + quy trình audit coverage. Dùng BẮT BUỘC khi: lên plan feature (/plan, /ship Gate 2), user nói 'cập nhật ở mọi surface', 'check surface', 'sót surface nào không', review/impact một feature storefront, hoặc sau khi code xong một feature đụng UI khách hàng. Walk từng dòng checklist, đánh dấu touched / not-affected / MISSED — không được kết luận 'đủ surface' nếu chưa đi hết bảng."
 ---
 
 # Surface audit — bản đồ surface & audit coverage
 
-**Vì sao tồn tại**: 2026-06-12, feature send-reward/gift-card sót nguyên Loyalty Hub
-(extension có HELPER RIÊNG trùng tên với surface khác) — phát hiện ở UAT thay vì
-lúc plan. Skill này là checklist chống sót: ~135 surface, đi từng dòng.
+**Vì sao tồn tại**: một feature từng sót nguyên một surface, vì surface đó có HELPER RIÊNG
+trùng tên với helper của surface khác — nhìn tên tưởng đã sửa rồi. Phát hiện ở UAT chứ không
+phải lúc plan. Skill này là checklist chống sót: đi từng dòng, không suy đoán.
 
 ## Quy trình audit (khi plan hoặc khi user yêu cầu "update mọi surface")
 
-1. Xác định feature đụng GÌ: redeem? earn? reward display? points? tier? referral? email?
+1. Xác định feature đụng GÌ: luồng nào, dữ liệu nào, kênh nào (kể cả kênh không phải UI).
 2. Đi qua **từng nhóm** dưới đây theo thứ tự. Với mỗi surface trả lời:
    - `TOUCHED` — cần sửa (ghi file:line dự kiến)
    - `N/A` — không render/không liên quan dữ liệu này (ghi 1 câu VÌ SAO)

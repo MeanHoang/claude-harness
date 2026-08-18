@@ -198,7 +198,7 @@ on **sonnet** (cheaper than doing it yourself on opus). Call them with the Task/
 | Widget V4 Lit, adapters, scripttag | `storefront-widget-implementer` |
 | Liquid app blocks, theme extensions | `theme-extension-implementer` |
 | BigQuery, Firestore schema + indexes | `data-implementer` |
-| Klaviyo/Omnisend/Smax, Shopify bulk ops | `integrations-implementer` |
+| Third-party sync, bulk operations | `integrations-implementer` |
 
 **Anything physically independent runs IN PARALLEL.** A phase touching admin, backend and widget:
 dispatch all three in one turn, then you merge the results and own the consistency between them.

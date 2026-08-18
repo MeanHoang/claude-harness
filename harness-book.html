@@ -102,7 +102,7 @@ carry per-project permissions and hook wiring. Wire the hooks by hand after inst
 <h3>Fill in your own values</h3>
 
 <p>Project-specific values were stripped before publishing and replaced with <code>{{VARS}}</code>:
-package paths, cloud project ids, git remote, store domains, test identities. Fourteen in all.</p>
+a package path, a cloud project id, a git remote, a chat channel, the repo root. Five in all.</p>
 
 <pre><code>cp harness.config.example harness.config     # fill it in; it is gitignored
 ./fill-vars.sh /path/to/project harness.config</code></pre>
@@ -120,8 +120,8 @@ left visible and reported. Nothing is silently replaced with an empty string.</p
 <h3>Declaring what your project requires</h3>
 
 <p><code>bootstrap-worktree.sh</code> checks that a fresh worktree has its guards. By default it
-requires <code>readonly-intent-guard.sh</code>, <code>branch-guard.sh</code> and
-<code>settings.local.json</code>. If your project needs more, list them in
+requires <code>readonly-intent-guard.sh</code>, <code>branch-guard.sh</code>,
+<code>cmux-say.sh</code> and <code>settings.local.json</code>. If your project needs more, list them in
 <code>.claude/harness-required.txt</code>, one path per line:</p>
 
 <pre><code>.claude/skills/&lt;your-pipeline-skill&gt;/SKILL.md

@@ -82,9 +82,10 @@ and the two of you write the goal together.
 1. Read the Notion task: {{notion_url}}
 2. **Run `/analyze-task` and follow it** — it owns this step in full: verify claims, kill open
    points with numbers, write `analysis.md`, grill one question at a time, co-write the goal.
-3. While verifying, explicitly check this hidden-coupling list: field-trigger loops, the
-   `pickFields.js` whitelist, whether a surface is still live (legacy scripttag is dead),
-   backwards compatibility for existing shops, Firestore index existence.
+3. While verifying, explicitly check this hidden-coupling list: write-a-field-fires-an-event
+   loops, whatever whitelist gates what reaches the client, whether the surface you are about to
+   change is still live at all, backwards compatibility for tenants already running, index
+   existence for any new query.
 
 The two rules from that skill that this template used to get wrong, restated because they are the
 whole point:
